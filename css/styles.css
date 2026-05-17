@@ -703,7 +703,10 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     }
     .panel.collapsed {
         width: 100% !important;
+        flex: 0 0 0 !important;
         height: 0 !important;
+        min-height: 0;
+        max-height: 0;
         opacity: 0;
         border-bottom: none;
     }
@@ -722,10 +725,11 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
         max-height: 45dvh;
         position: static;
     }
-    .preview {
-        flex: 0 0 clamp(120px, 24vh, 260px);
-        flex-basis: clamp(120px, 24dvh, 260px);
-        min-height: 120px;
+    .panel:not(.collapsed) + .preview { display: none; }
+    .panel.collapsed + .preview {
+        display: block;
+        flex: 1 1 auto;
+        min-height: 0;
     }
     .kb-bar      { display: none; }
     .header-hint { display: none; }
