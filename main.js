@@ -127,6 +127,8 @@ const occSelect     = document.getElementById('occSelect');
 const btnOccClear   = document.getElementById('btnOccClear');
 const occList       = document.getElementById('occList');
 
+installIOSFocusZoomGuard();
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function renderAll() {
@@ -140,6 +142,42 @@ function renderAll() {
     onMoveDown:   (id) => moveSibling(id, +1, ctx),
   });
   renderOccupationUi();
+}
+
+function installIOSFocusZoomGuard() {
+  const isiPhone = /iPhone|iPod/.test(navigator.userAgent);
+  if (!isiPhone) return;
+
+  const viewport = document.querySelector('meta[name="viewport"]');
+  if (!viewport) return;
+
+  const baseContent = viewport.getAttribute('content') || 'width=device-width, initial-scale=1.0';
+  const lockedContent = baseContent.includes('maximum-scale')
+    ? baseContent
+    : `${baseContent}, maximum-scale=1`;
+  const focusableSelector = 'input, textarea, select';
+  let restoreTimer = null;
+
+  const lockViewport = () => {
+    clearTimeout(restoreTimer);
+    viewport.setAttribute('content', lockedContent);
+  };
+
+  const restoreViewport = () => {
+    clearTimeout(restoreTimer);
+    restoreTimer = setTimeout(() => {
+      // Re-apply before restoring to nudge iPhone Safari back after keyboard dismissal.
+      viewport.setAttribute('content', lockedContent);
+      requestAnimationFrame(() => viewport.setAttribute('content', baseContent));
+    }, 350);
+  };
+
+  document.addEventListener('focusin', (event) => {
+    if (event.target?.matches?.(focusableSelector)) lockViewport();
+  });
+  document.addEventListener('focusout', (event) => {
+    if (event.target?.matches?.(focusableSelector)) restoreViewport();
+  });
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────────

@@ -254,6 +254,34 @@ const OCCUPATION_OPTIONS=(typeof PREVIEW_OPTIONS==='object' && Array.isArray(PRE
 const NODE_COLOR_MAP=${colorMapJSON};
 const SLIP_VERTICAL_CLEARANCE=${Math.max(10, Math.round(nodeH * 0.15))};
 
+function installIOSFocusZoomGuard(){
+  const isiPhone=/iPhone|iPod/.test(navigator.userAgent);
+  if(!isiPhone) return;
+  const viewport=document.querySelector('meta[name="viewport"]');
+  if(!viewport) return;
+  const baseContent=viewport.getAttribute('content')||'width=device-width,initial-scale=1';
+  const lockedContent=baseContent.includes('maximum-scale')?baseContent:baseContent+',maximum-scale=1';
+  let restoreTimer=null;
+  function lock(){
+    clearTimeout(restoreTimer);
+    viewport.setAttribute('content',lockedContent);
+  }
+  function restore(){
+    clearTimeout(restoreTimer);
+    restoreTimer=setTimeout(()=>{
+      viewport.setAttribute('content',lockedContent);
+      requestAnimationFrame(()=>viewport.setAttribute('content',baseContent));
+    },350);
+  }
+  document.addEventListener('focusin',e=>{
+    if(e.target?.matches?.('input,textarea,select')) lock();
+  });
+  document.addEventListener('focusout',e=>{
+    if(e.target?.matches?.('input,textarea,select')) restore();
+  });
+}
+installIOSFocusZoomGuard();
+
 /* ── Layout constants ── */
 const C={
   nW:${nodeW}, nH:${nodeH},
