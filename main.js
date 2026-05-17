@@ -657,6 +657,9 @@ function deleteOccupation(occupation) {
     if (node.meta?.occupation === occupation) {
       node.meta = { ...node.meta, occupation: '' };
     }
+    if (node.meta?.occupation2 === occupation) {
+      node.meta = { ...node.meta, occupation2: '' };
+    }
   });
   renderAll();
   schedulePreviewUpdate();
@@ -684,6 +687,9 @@ function renameOccupation(oldValue, nextValue) {
   traverse(root, node => {
     if (node.meta?.occupation === prev) {
       node.meta = { ...node.meta, occupation: next };
+    }
+    if (node.meta?.occupation2 === prev) {
+      node.meta = { ...node.meta, occupation2: next };
     }
   });
   renderAll();
