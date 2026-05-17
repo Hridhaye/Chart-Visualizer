@@ -675,6 +675,7 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     .node-label  { font-size: 15px; line-height: 40px; }
     .node-input  { font-size: 16px; height: 36px; padding: 3px 6px; }
     .toggle      { width: 22px; height: 22px; font-size: 12px; margin-right: 8px; }
+    .toggle.leaf { width: 0; margin-right: 0; overflow: hidden; }
     .sign-dot    { width: 10px; height: 10px; margin-right: 8px; }
     .legend-item { font-size: 12px; }
     .import-textarea { font-size: 16px; line-height: 1.5; }
