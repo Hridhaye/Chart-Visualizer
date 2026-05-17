@@ -424,6 +424,16 @@ function beginHoldReparent(e,id){
     if(!holdDrag||holdDrag.pointerId!==e.pointerId) return;
     // Only now do we claim the pointer — user clearly wants to reparent.
     holdDrag.active=true;
+    // Stop any momentum and tell the scene to drop this pointer so it
+    // can't pan further while the user is dragging to a new parent.
+    try{ stopMomentum(); }catch(_){}
+    try{
+      if(ptrs.has(holdDrag.pointerId)){
+        ptrs.delete(holdDrag.pointerId);
+        sc.classList.remove('dragging');
+        try{ sc.releasePointerCapture(holdDrag.pointerId); }catch(_){}
+      }
+    }catch(_){}
     try{ nodeEl.setPointerCapture(holdDrag.pointerId); }catch(_){}
     nodeEl.classList.add('drag-source');
     setDropTarget(pickTarget(holdDrag.lastX,holdDrag.lastY,holdDrag.sourceId));
