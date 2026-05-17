@@ -440,6 +440,7 @@ btnImport.addEventListener('click', () => {
   if (!result) return;
   pushUndoState(ctx);
   root = result.root;
+  occupations = uniqueSortedOccupations(result.occupations || []);
   sel  = null;
   importInput.value      = '';
   importStatus.textContent = '—';

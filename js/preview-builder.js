@@ -153,25 +153,18 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   position:absolute;
   width:24px;
   height:24px;
-  border-radius:999px;
   align-items:center;
   justify-content:center;
-  font-size:14px;
-  font-weight:800;
-  line-height:1;
   pointer-events:none;
+  background:currentColor;
 }
 .double-occupation-badge{
   top:8px;right:8px;
-  background:rgba(212,168,76,.95);
-  color:#1b1110;
-  box-shadow:0 1px 6px rgba(0,0,0,.24);
+  border-radius:50%;
 }
 .special-emblem{
   top:8px;left:8px;
-  background:rgba(255,255,255,.12);
-  color:#f8eacf;
-  border:1px solid rgba(255,255,255,.2);
+  transform: rotate(45deg);
 }
 .double-occupation-badge.visible,
 .special-emblem.visible{display:flex}
@@ -465,7 +458,8 @@ function cancelSecondOccupationEdit(){
    Future: add .node-occupation div and .rebirth-badge here.
 ── */
 function buildCardContent(nodeEl, node){
-  const fg=textColorFor(NODE_COLOR_MAP[sc2(node.name)]||'#ffffff');
+  const bgColor = NODE_COLOR_MAP[sc2(node.name)] || '#ffffff';
+  const fg=textColorFor(bgColor);
   const hasDouble = !!(node.meta?.occupation2);
 
   if(hasDouble) nodeEl.classList.add('double-occupation');
@@ -479,13 +473,13 @@ function buildCardContent(nodeEl, node){
   // Double-occupation badge
   const occ2Badge=document.createElement('div');
   occ2Badge.className='double-occupation-badge'+(hasDouble ? ' visible' : '');
-  occ2Badge.textContent='2';
+  occ2Badge.style.color=fg;
   nodeEl.appendChild(occ2Badge);
 
   // Emblem badge
   const emblemEl=document.createElement('div');
   emblemEl.className='special-emblem'+(node.meta?.emblem ? ' visible' : '');
-  emblemEl.textContent='★';
+  emblemEl.style.color=fg;
   nodeEl.appendChild(emblemEl);
 
   // Rebirth badge (hidden until meta.reborn is true)
@@ -619,6 +613,7 @@ function renderNodes(){
     const acts=document.createElement('div');
     acts.className='node-actions';
     const parentId=po.get(id);
+    const parentNode=parentId!==undefined?nd.get(parentId):null;
     const sibs=parentId!==undefined?(ch.get(parentId)||[]):[];
     const idx=sibs.indexOf(id);
     if(parentId!==undefined){
@@ -630,7 +625,9 @@ function renderNodes(){
     acts.appendChild(mkBtn('✎','Rename',()=>beginRename(id)));
     acts.appendChild(mkBtn('Oc','Set occupation',()=>beginOccupationEdit(id)));
     acts.appendChild(mkBtn('2O','Second occupation',()=>beginSecondOccupationEdit(id), OCCUPATION_OPTIONS.length===0));
-    acts.appendChild(mkBtn('★','Toggle emblem',()=>act(id,'toggle-emblem')));
+    if(parentNode?.meta?.occupation2){
+      acts.appendChild(mkBtn('★','Toggle emblem',()=>act(id,'toggle-emblem')));
+    }
     if(parentId!==undefined) acts.appendChild(mkBtn('×','Delete',()=>act(id,'delete')));
     wrap.appendChild(acts);
     nl.appendChild(wrap);
