@@ -8,9 +8,11 @@
  *
  * NodeMeta (extensible bag — add fields here for new features):
  *   {
- *     reborn?: boolean          — marks a rebirth character (upcoming)
- *     rebirthChildSplit?: number — index of first post-rebirth child (upcoming)
- *     occupation?: string       — god-vocation text (upcoming)
+ *     reborn?: boolean             — marks a rebirth character (upcoming)
+ *     rebirthChildSplit?: number   — index of first post-rebirth child (upcoming)
+ *     occupation?: string          — god-vocation text (upcoming)
+ *     occupation2?: string         — secondary occupation for special dual-occupation cards
+ *     emblem?: boolean             — marks a node with a special child/emblem indicator
  *   }
  */
 

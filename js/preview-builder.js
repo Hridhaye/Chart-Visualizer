@@ -146,6 +146,36 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 }
 .rebirth-badge.visible{display:block}
 
+.node.double-occupation{box-shadow:0 0 0 2px rgba(212,168,76,.3),0 1px 2px rgba(0,0,0,.08)}
+.double-occupation-badge,
+.special-emblem{
+  display:none;
+  position:absolute;
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  font-weight:800;
+  line-height:1;
+  pointer-events:none;
+}
+.double-occupation-badge{
+  top:8px;right:8px;
+  background:rgba(212,168,76,.95);
+  color:#1b1110;
+  box-shadow:0 1px 6px rgba(0,0,0,.24);
+}
+.special-emblem{
+  top:8px;left:8px;
+  background:rgba(255,255,255,.12);
+  color:#f8eacf;
+  border:1px solid rgba(255,255,255,.2);
+}
+.double-occupation-badge.visible,
+.special-emblem.visible{display:flex}
+
 /* ── Action bar ── */
 .node-actions{display:none;align-items:center;gap:${actGap}px;
   padding:${actPad};border-radius:999px;
@@ -294,7 +324,7 @@ function post(msg){window.parent.postMessage(msg,'*');}
 function act(id,action,extras){post({type:'node-action',id,action,...(extras||{})});}
 
 /* ── Drag-reparent state ── */
-let selId=INIT_SEL, renamingId=null, focusRenameId=null, occupationEditingId=null, focusOccId=null;
+let selId=INIT_SEL, renamingId=null, focusRenameId=null, occupationEditingId=null, focusOccId=null, secondOccupationEditingId=null, focusOcc2Id=null;
 let suppressSceneClick=false, suppressNodeClickUntil=0;
 const REPAR_HOLD_MS=260, REPAR_MOVE_TOL=8;
 let holdDrag=null;
@@ -398,6 +428,7 @@ function beginOccupationEdit(id){
   selId=id;
   renamingId=null; focusRenameId=null;
   occupationEditingId=id; focusOccId=id;
+  secondOccupationEditingId=null; focusOcc2Id=null;
   updateSelection(); renderNodes();
   post({type:'select-node',id});
 }
@@ -410,6 +441,23 @@ function cancelOccupationEdit(){
   occupationEditingId=null; focusOccId=null; renderNodes();
 }
 
+function beginSecondOccupationEdit(id){
+  selId=id;
+  renamingId=null; focusRenameId=null;
+  occupationEditingId=null; focusOccId=null;
+  secondOccupationEditingId=id; focusOcc2Id=id;
+  updateSelection(); renderNodes();
+  post({type:'select-node',id});
+}
+function commitSecondOccupation(id, sel){
+  const value=(sel.value||'').trim();
+  secondOccupationEditingId=null; focusOcc2Id=null; renderNodes();
+  act(id,'set-occupation-2',{value});
+}
+function cancelSecondOccupationEdit(){
+  secondOccupationEditingId=null; focusOcc2Id=null; renderNodes();
+}
+
 /* ── Card DOM builder ──
    THIS IS THE FUNCTION TO EDIT when adding occupation / rebirth fields.
    It builds the inner content of each .node div.
@@ -418,12 +466,27 @@ function cancelOccupationEdit(){
 ── */
 function buildCardContent(nodeEl, node){
   const fg=textColorFor(NODE_COLOR_MAP[sc2(node.name)]||'#ffffff');
+  const hasDouble = !!(node.meta?.occupation2);
+
+  if(hasDouble) nodeEl.classList.add('double-occupation');
 
   // Name
   const nameLbl=document.createElement('span');
   nameLbl.textContent=node.name;
   nameLbl.style.color=fg;
   nodeEl.appendChild(nameLbl);
+
+  // Double-occupation badge
+  const occ2Badge=document.createElement('div');
+  occ2Badge.className='double-occupation-badge'+(hasDouble ? ' visible' : '');
+  occ2Badge.textContent='2';
+  nodeEl.appendChild(occ2Badge);
+
+  // Emblem badge
+  const emblemEl=document.createElement('div');
+  emblemEl.className='special-emblem'+(node.meta?.emblem ? ' visible' : '');
+  emblemEl.textContent='★';
+  nodeEl.appendChild(emblemEl);
 
   // Rebirth badge (hidden until meta.reborn is true)
   const rebirthEl=document.createElement('div');
@@ -491,6 +554,31 @@ function renderNodes(){
       if(focusOccId===id){
         requestAnimationFrame(()=>{sel.focus();focusOccId=null;});
       }
+    } else if(secondOccupationEditingId===id){
+      const sel=document.createElement('select');
+      sel.className='node-occ-select node-inline-editor';
+      const empty=document.createElement('option');
+      empty.value=''; empty.textContent='(No second occupation)';
+      sel.appendChild(empty);
+      for(const occ of OCCUPATION_OPTIONS){
+        const opt=document.createElement('option');
+        opt.value=occ;
+        opt.textContent=occ;
+        sel.appendChild(opt);
+      }
+      sel.value=(node.meta?.occupation2||'').trim();
+      sel.addEventListener('pointerdown',e=>e.stopPropagation());
+      sel.addEventListener('click',e=>e.stopPropagation());
+      sel.addEventListener('blur',()=>commitSecondOccupation(id,sel));
+      sel.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commitSecondOccupation(id,sel);}
+        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancelSecondOccupationEdit();}
+      });
+      sel.addEventListener('change',()=>commitSecondOccupation(id,sel));
+      wrap.appendChild(sel);
+      if(focusOcc2Id===id){
+        requestAnimationFrame(()=>{sel.focus();focusOcc2Id=null;});
+      }
     } else {
       const d=document.createElement('div');
       d.className='node '+sc2(node.name);
@@ -514,6 +602,17 @@ function renderNodes(){
         slip.style.borderColor='rgba(0,0,0,.24)';
         wrap.appendChild(slip);
       }
+      const occ2=(node.meta?.occupation2||'').trim();
+      if(SHOW_OCCUPATION_SLIPS && occ2){
+        const slip=document.createElement('div');
+        slip.className='occupation-slip visible';
+        slip.textContent=occ2;
+        slip.style.marginTop='-4px';
+        slip.style.background='rgba(212,168,76,.9)';
+        slip.style.color='#1b1110';
+        slip.style.borderColor='rgba(0,0,0,.24)';
+        wrap.appendChild(slip);
+      }
     }
 
     /* Action bar */
@@ -530,6 +629,8 @@ function renderNodes(){
     acts.appendChild(mkBtn('+','Add child',()=>act(id,'add-child',{inline:true})));
     acts.appendChild(mkBtn('✎','Rename',()=>beginRename(id)));
     acts.appendChild(mkBtn('Oc','Set occupation',()=>beginOccupationEdit(id)));
+    acts.appendChild(mkBtn('2O','Second occupation',()=>beginSecondOccupationEdit(id), OCCUPATION_OPTIONS.length===0));
+    acts.appendChild(mkBtn('★','Toggle emblem',()=>act(id,'toggle-emblem')));
     if(parentId!==undefined) acts.appendChild(mkBtn('×','Delete',()=>act(id,'delete')));
     wrap.appendChild(acts);
     nl.appendChild(wrap);

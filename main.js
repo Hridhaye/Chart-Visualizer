@@ -272,6 +272,27 @@ window.addEventListener('message', e => {
         schedulePreviewUpdate();
         break;
       }
+      case 'set-occupation-2': {
+        const node = find(id, root);
+        if (!node) break;
+        const next = String(e.data.value || '').trim();
+        const prev = String(node.meta?.occupation2 || '').trim();
+        if (next === prev) break;
+        pushUndoState(ctx);
+        node.meta = { ...node.meta, occupation2: next };
+        renderAll();
+        schedulePreviewUpdate();
+        break;
+      }
+      case 'toggle-emblem': {
+        const node = find(id, root);
+        if (!node) break;
+        pushUndoState(ctx);
+        node.meta = { ...node.meta, emblem: !node.meta?.emblem };
+        renderAll();
+        schedulePreviewUpdate();
+        break;
+      }
     }
   }
 });
