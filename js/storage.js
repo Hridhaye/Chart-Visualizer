@@ -162,8 +162,8 @@ export async function pullFromGist(cfg) {
     const headers = { 'Accept': 'application/vnd.github+json' };
     if (cfg.token) headers['Authorization'] = `Bearer ${cfg.token}`;
     const res = await fetch(
-      `https://api.github.com/gists/${encodeURIComponent(cfg.gistId)}`,
-      { headers }
+      `https://api.github.com/gists/${encodeURIComponent(cfg.gistId)}?_=${Date.now()}`,
+      { headers, cache: 'no-store' }
     );
     if (!res.ok) return { ok: false, status: res.status };
     const gist     = await res.json();
