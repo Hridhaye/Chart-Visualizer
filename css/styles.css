@@ -670,7 +670,11 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     .row-btn        { width: 42px; height: 42px; font-size: 13px; }
     .row-btn.reorder { width: 46px; }
     .row-actions    { gap: 4px; padding-left: 18px; }
-    .tree-row       { padding-right: 10px; }
+    .tree-row       { min-height: 40px; padding-right: 10px; }
+    .vline, .connector { height: 40px; }
+    .connector::before { height: 20px; }
+    .connector::after  { top: 20px; }
+    .connector.not-last::before { height: 40px; }
 
     .node-label  { font-size: 15px; line-height: 40px; }
     .node-input  { font-size: 16px; height: 36px; padding: 3px 6px; }
