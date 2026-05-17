@@ -672,6 +672,8 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     .body { flex-direction: column; }
     .panel {
         width: 100% !important;
+        display: flex;
+        flex-direction: column;
         height: calc(100vh - 56px);
         max-height: calc(100vh - 56px);
         overflow: hidden;
@@ -687,9 +689,20 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
         opacity: 0;
         border-bottom: none;
     }
-    .tree-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    .bottom-tools { flex-shrink: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: 50vh; }
-    .preview     { min-height: 0; }
+    .tree-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .bottom-tools {
+        flex-shrink: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        max-height: 45vh;
+        position: static;
+    }
+    .preview     { min-height: 0; flex: 1; }
     .kb-bar      { display: none; }
     .header-hint { display: none; }
 }
@@ -719,5 +732,5 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     .sign-dot    { width: 7px; height: 7px; margin-right: 5px; }
     .legend-item { font-size: 10px; }
     .import-textarea { font-size: 11px; line-height: 1.5; }
-    .panel { height: calc(100vh - 50px); max-height: calc(100vh - 50px); }
+    .panel { height: calc(100vh - 50px); max-height: calc(100vh - 50px); overflow: hidden; }
 }
