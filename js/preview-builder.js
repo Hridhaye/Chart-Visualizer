@@ -210,11 +210,13 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   .node-actions{gap:${Math.round(8*sm)}px;padding:${Math.round(8*sm)}px ${Math.round(10*sm)}px}
   .node-btn{width:${Math.round(36*sm)}px;height:${Math.round(36*sm)}px;
     font-size:${Math.max(15,Math.round(15*sm))}px}
+  .node-input,.node-occ-select{font-size:16px}
 }
 @media screen and (max-width:1024px){
   .node-actions{gap:${Math.round(9*sm)}px;padding:${Math.round(9*sm)}px ${Math.round(11*sm)}px}
   .node-btn{width:${Math.round(40*sm)}px;height:${Math.round(40*sm)}px;
     font-size:${Math.max(16,Math.round(16*sm))}px}
+  .node-input,.node-occ-select{font-size:16px}
 }
 ${colorCSS}`;
 }

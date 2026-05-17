@@ -673,11 +673,16 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     .tree-row       { padding-right: 10px; }
 
     .node-label  { font-size: 15px; line-height: 40px; }
-    .node-input  { font-size: 14px; height: 32px; padding: 3px 6px; }
+    .node-input  { font-size: 16px; height: 36px; padding: 3px 6px; }
     .toggle      { width: 22px; height: 22px; font-size: 12px; margin-right: 8px; }
     .sign-dot    { width: 10px; height: 10px; margin-right: 8px; }
     .legend-item { font-size: 12px; }
-    .import-textarea { font-size: 14px; line-height: 1.6; }
+    .import-textarea { font-size: 16px; line-height: 1.5; }
+    input,
+    textarea,
+    select {
+        font-size: 16px;
+    }
     .kb          { font-size: 12px; padding: 6px 8px; }
 
     .panel { touch-action: manipulation; }
@@ -759,6 +764,13 @@ iframe { width: 100%; height: 100%; border: none; display: block; }
     .toggle      { width: 14px; height: 14px; font-size: 8px; margin-right: 4px; }
     .sign-dot    { width: 7px; height: 7px; margin-right: 5px; }
     .legend-item { font-size: 10px; }
-    .import-textarea { font-size: 11px; line-height: 1.5; }
+    .node-input,
+    .import-textarea,
+    input,
+    textarea,
+    select {
+        font-size: 16px;
+    }
+    .import-textarea { line-height: 1.5; }
     .panel { overflow: hidden; }
 }
