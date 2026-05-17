@@ -12,25 +12,27 @@
 
     <!-- ── Header bar ── -->
     <header class="header">
-        <button class="btn-toggle-panel" id="btnToggle" title="Toggle editor">☰</button>
-        <h1>Cult Chart Editor</h1>
-        <span class="header-sep"></span>
-        <span class="save-indicator" id="saveIndicator"></span>
-        <button class="btn-save" id="btnSave">Save</button>
-        <button class="btn-save" id="btnUndo" disabled>Undo</button>
-        <button class="btn-save" id="btnSyncPull">Pull latest</button>
-        <button class="btn-save" id="btnOccSlips">Occ slips: Off</button>
+        <div class="header-brand">
+            <button class="btn-toggle-panel" id="btnToggle" title="Toggle editor">☰</button>
+            <h1>Cult Chart Editor</h1>
+        </div>
 
-        <!-- Spacing slider -->
-        <div class="spacing-control">
-            <label for="spacingSlider" class="spacing-label">Space</label>
-            <input
-                type="range"
-                id="spacingSlider"
-                class="spacing-slider"
-                min="1.0" max="1.7" step="0.1" value="1.0"
-            />
-            <span id="spacingValue" class="spacing-value">1.0x</span>
+        <div class="header-actions">
+            <span class="save-indicator" id="saveIndicator"></span>
+            <button class="btn-save" id="btnSave">Save</button>
+            <button class="btn-save" id="btnUndo" disabled>Undo</button>
+            <button class="btn-save" id="btnSyncPull">Pull latest</button>
+            <button class="btn-save" id="btnOccSlips">Occ slips: Off</button>
+            <div class="spacing-control">
+                <label for="spacingSlider" class="spacing-label">Space</label>
+                <input
+                    type="range"
+                    id="spacingSlider"
+                    class="spacing-slider"
+                    min="1.0" max="1.7" step="0.1" value="1.0"
+                />
+                <span id="spacingValue" class="spacing-value">1.0x</span>
+            </div>
         </div>
 
         <span class="header-hint">

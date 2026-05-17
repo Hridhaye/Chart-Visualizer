@@ -711,6 +711,8 @@ let tapStartX=0,tapStartY=0,dragMoved=false;
 let panAnchorX=0,panAnchorY=0,camAnchorX=0,camAnchorY=0,lastPanX=0,lastPanY=0;
 let pinchActive=false,pinch0d=0,pinch0z=0,pinch0mx=0,pinch0my=0,pinchCam0x=0,pinchCam0y=0;
 const PINCH_DAMPEN=0.65;
+const PINCH_INTENT_PX=6;
+const PINCH_PAN_DAMPEN=0.72;
 
 /* Velocity ring buffer */
 const VEL_BUF=6,vBufX=new Float32Array(VEL_BUF),vBufY=new Float32Array(VEL_BUF);
@@ -779,10 +781,14 @@ sc.addEventListener('pointermove',e=>{
     const{mx,my,d}=getPinchMid();
     const r=sc.getBoundingClientRect();
     const curMx=mx-r.left,curMy=my-r.top;
-    const ratio=1+(d/pinch0d-1)*PINCH_DAMPEN;
+    const pinchDelta=Math.abs(d-pinch0d);
+    const intent=Math.min(1,pinchDelta/PINCH_INTENT_PX);
+    const ratio=1+(d/pinch0d-1)*PINCH_DAMPEN*intent;
     const nz=Math.min(C.maxZ,Math.max(C.minZ,pinch0z*ratio));
     const wx=(pinch0mx-pinchCam0x)/pinch0z,wy=(pinch0my-pinchCam0y)/pinch0z;
-    cam.z=nz;cam.x=pinch0mx-wx*nz+(curMx-pinch0mx);cam.y=pinch0my-wy*nz+(curMy-pinch0my);
+    const panDx=(curMx-pinch0mx)*PINCH_PAN_DAMPEN*intent;
+    const panDy=(curMy-pinch0my)*PINCH_PAN_DAMPEN*intent;
+    cam.z=nz;cam.x=pinch0mx-wx*nz+panDx;cam.y=pinch0my-wy*nz+panDy;
     applyTransform();
   }
 });
