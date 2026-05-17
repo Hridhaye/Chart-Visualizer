@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cult Chart Editor</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<div class="shell">
+
+    <!-- ── Header bar ── -->
+    <header class="header">
+        <button class="btn-toggle-panel" id="btnToggle" title="Toggle editor">☰</button>
+        <h1>Cult Chart Editor</h1>
+        <span class="header-sep"></span>
+        <span class="save-indicator" id="saveIndicator"></span>
+        <button class="btn-save" id="btnSave">Save</button>
+        <button class="btn-save" id="btnUndo" disabled>Undo</button>
+        <button class="btn-save" id="btnSyncPull">Pull latest</button>
+        <button class="btn-save" id="btnOccSlips">Occ slips: Off</button>
+
+        <!-- Spacing slider -->
+        <div class="spacing-control">
+            <label for="spacingSlider" class="spacing-label">Space</label>
+            <input
+                type="range"
+                id="spacingSlider"
+                class="spacing-slider"
+                min="1.0" max="1.7" step="0.1" value="1.0"
+            />
+            <span id="spacingValue" class="spacing-value">1.0x</span>
+        </div>
+
+        <span class="header-hint">
+            Click to select · dbl-click to rename · Tab = child · Enter = sibling
+        </span>
+    </header>
+
+    <!-- ── Main body ── -->
+    <div class="body">
+
+        <!-- ── Left panel ── -->
+        <div class="panel" id="panel">
+
+            <div class="panel-head">
+                <span class="panel-head-title">Members</span>
+                <button class="panel-head-btn" id="btnExp">Expand</button>
+                <button class="panel-head-btn" id="btnCol">Collapse</button>
+                <button class="panel-head-btn" id="btnBottom">Hide bottom</button>
+            </div>
+
+            <!-- Tree -->
+            <div class="tree-scroll" id="treeRoot"></div>
+
+            <!-- Bottom tools (collapsible) -->
+            <div class="bottom-tools" id="bottomTools">
+
+                <div class="legend" id="legend"></div>
+
+                <div class="panel-foot">
+                    <span class="status" id="status"></span>
+                    <button class="btn-export" id="btnCopy">Copy array</button>
+                    <button class="btn-export" id="btnPrintText">Print text</button>
+                </div>
+
+                <!-- Import from indented text -->
+                <div class="import-section" id="importSection">
+                    <button class="import-toggle" id="importToggle">
+                        <span class="import-toggle-arrow" id="importArrow">▶</span>
+                        <span>Paste import</span>
+                    </button>
+                    <div class="import-body" id="importBody">
+                        <textarea
+                            id="importInput"
+                            class="import-textarea"
+                            spellcheck="false"
+                            placeholder="Founding Father&#10;  Starbender Aerion&#10;    Starbender Calliothene&#10;  Veilcross Hadrien&#10;    Veilcross Ilm"
+                        ></textarea>
+                        <div class="import-foot">
+                            <span class="import-status" id="importStatus">—</span>
+                            <button class="btn-import" id="btnImport" disabled>Replace tree</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cloud sync config -->
+                <div class="import-section" id="syncSection">
+                    <button class="import-toggle" id="syncToggle">
+                        <span class="import-toggle-arrow" id="syncArrow">▶</span>
+                        <span>Cloud sync (GitHub Gist)</span>
+                    </button>
+                    <div class="import-body" id="syncBody">
+                        <input
+                            id="syncGistId"
+                            class="import-textarea"
+                            style="height: 38px;"
+                            placeholder="Gist ID (required)"
+                        />
+                        <input
+                            id="syncFileName"
+                            class="import-textarea"
+                            style="height: 38px;"
+                            placeholder="File name in gist (default: cult-chart-save.json)"
+                        />
+                        <input
+                            id="syncToken"
+                            class="import-textarea"
+                            style="height: 38px;"
+                            type="password"
+                            placeholder="GitHub token (gist scope)"
+                        />
+                        <div class="import-foot">
+                            <span class="import-status" id="syncStatus">—</span>
+                            <button class="btn-import" id="btnSyncConfig">Save config</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Occupation list + assignment -->
+                <div class="import-section" id="occSection">
+                    <button class="import-toggle" id="occToggle">
+                        <span class="import-toggle-arrow" id="occArrow">▶</span>
+                        <span>Occupations</span>
+                    </button>
+                    <div class="import-body" id="occBody">
+                        <div class="occ-add-row">
+                            <input
+                                id="occInput"
+                                class="import-textarea occ-input"
+                                placeholder="Add occupation"
+                            />
+                            <button class="btn-import" id="btnOccAdd">Add</button>
+                        </div>
+
+                        <div class="occ-assign-row">
+                            <label for="occSelect" class="occ-label">Selected member occupation</label>
+                            <select id="occSelect" class="import-textarea occ-select"></select>
+                            <button class="btn-import" id="btnOccClear">Clear</button>
+                        </div>
+
+                        <div class="occ-list" id="occList"></div>
+                    </div>
+                </div>
+
+            </div><!-- /bottom-tools -->
+
+        </div><!-- /panel -->
+
+        <!-- ── Preview pane ── -->
+        <div class="preview">
+            <iframe id="preview" title="Chart Preview"></iframe>
+            <div class="preview-tag">Live Preview</div>
+            <div class="kb-bar">
+                <span class="kb">Enter — sibling</span>
+                <span class="kb">Tab — child</span>
+                <span class="kb">F2 — rename</span>
+                <span class="kb">↑↓ — navigate</span>
+                <span class="kb">Del — delete</span>
+            </div>
+        </div>
+
+    </div><!-- /body -->
+
+</div><!-- /shell -->
+
+<script type="module" src="main.js"></script>
+
+</body>
+</html>
