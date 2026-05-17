@@ -391,11 +391,12 @@ function beginHoldReparent(e,id){
   if(renamingId!==null||occupationEditingId!==null) return;
   const wrap=wrapById(id); if(!wrap) return;
   const nodeEl=wrap.querySelector('.node'); if(!nodeEl) return;
-  e.stopPropagation();
+  // NOTE: do NOT stopPropagation or setPointerCapture here — the scene needs
+  // this pointerdown to start panning. We only capture once the long-press
+  // timer fires (i.e. user is actually reparenting, not panning).
   holdDrag={pointerId:e.pointerId,sourceId:id,
     startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,
     active:false,targetId:null,timer:null};
-  nodeEl.setPointerCapture(e.pointerId);
   const onMove=ev=>{
     if(!holdDrag||ev.pointerId!==holdDrag.pointerId) return;
     holdDrag.lastX=ev.clientX; holdDrag.lastY=ev.clientY;
@@ -421,7 +422,9 @@ function beginHoldReparent(e,id){
   };
   holdDrag.timer=setTimeout(()=>{
     if(!holdDrag||holdDrag.pointerId!==e.pointerId) return;
+    // Only now do we claim the pointer — user clearly wants to reparent.
     holdDrag.active=true;
+    try{ nodeEl.setPointerCapture(holdDrag.pointerId); }catch(_){}
     nodeEl.classList.add('drag-source');
     setDropTarget(pickTarget(holdDrag.lastX,holdDrag.lastY,holdDrag.sourceId));
   },REPAR_HOLD_MS);
@@ -750,9 +753,9 @@ let vx=0,vy=0,rafId=null;
 let tapStartX=0,tapStartY=0,dragMoved=false;
 let panAnchorX=0,panAnchorY=0,camAnchorX=0,camAnchorY=0,lastPanX=0,lastPanY=0;
 let pinchActive=false,pinch0d=0,pinch0z=0,pinch0mx=0,pinch0my=0,pinchCam0x=0,pinchCam0y=0;
-const PINCH_DAMPEN=0.65;
-const PINCH_INTENT_PX=6;
-const PINCH_PAN_DAMPEN=0.72;
+const PINCH_DAMPEN=0.85;
+const PINCH_INTENT_PX=2;
+const PINCH_PAN_DAMPEN=0.85;
 
 /* Velocity ring buffer */
 const VEL_BUF=6,vBufX=new Float32Array(VEL_BUF),vBufY=new Float32Array(VEL_BUF);
@@ -810,6 +813,13 @@ sc.addEventListener('pointerdown',e=>{
 sc.addEventListener('pointermove',e=>{
   if(!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  // If the user started their gesture on a node but is now panning,
+  // cancel the pending hold-reparent timer so the node doesn't grab
+  // the pointer mid-pan.
+  if(holdDrag&&!holdDrag.active&&holdDrag.pointerId===e.pointerId){
+    const moved=Math.hypot(e.clientX-holdDrag.startX,e.clientY-holdDrag.startY);
+    if(moved>REPAR_MOVE_TOL){clearTimeout(holdDrag.timer);holdDrag=null;}
+  }
   if(ptrs.size===1&&!pinchActive){
     const p=ptrs.get(e.pointerId);
     const fdx=p.x-lastPanX,fdy=p.y-lastPanY;
@@ -834,6 +844,11 @@ sc.addEventListener('pointermove',e=>{
 });
 sc.addEventListener('pointerup',endPtr);sc.addEventListener('pointercancel',endPtr);
 function endPtr(e){
+  // Clear any pending (inactive) hold-reparent on release — its own listeners
+  // are on the node element and may not see the up if the finger drifted off.
+  if(holdDrag&&!holdDrag.active&&holdDrag.pointerId===e.pointerId){
+    clearTimeout(holdDrag.timer);holdDrag=null;
+  }
   if(!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId);
   if(ptrs.size===0){
