@@ -133,8 +133,10 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   line-height:1.28;
   letter-spacing:0.02em;
   box-shadow:0 4px 12px rgba(0,0,0,.2);
+  cursor:pointer;
 }
 .occupation-slip.visible{display:block}
+.occupation-slip.visible:hover{filter:brightness(1.08)}
 
 /* ── Rebirth badge (upcoming — hidden until meta.reborn is set) ── */
 .rebirth-badge{
@@ -180,11 +182,15 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   display:flex;align-items:center;justify-content:center;cursor:pointer}
 .node-btn:hover,.node-btn:active{background:rgba(212,168,76,.22);color:#f6d183}
 .node-btn.disabled{opacity:.38;pointer-events:none}
-.node-input{width:100%;min-height:38px;padding:8px 10px;
-  border:2px solid rgba(212,168,76,.92);border-radius:4px;
-  background:#fffaf1;color:#2b2117;
-  font:700 14px/1.15 Arial,sans-serif;text-align:center;
-  outline:none;box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.node-input{
+  width:${Math.round(nodeW * 0.94)}px;
+  min-height:${Math.max(36, Math.round(42 * sm))}px;
+  padding:${Math.max(8, Math.round(8 * sm))}px ${Math.max(10, Math.round(10 * sm))}px;
+  border:2px solid rgba(212,168,76,.92);border-radius:8px;
+  background:rgba(24,22,20,.96);color:#f0e5cf;
+  font:700 ${Math.max(12, Math.round(13 * sm))}px/1.15 Arial,sans-serif;text-align:center;
+  outline:none;box-shadow:0 12px 26px rgba(0,0,0,.34);
+  position:relative;z-index:2550;}
 .node-occ-select{
   width:${Math.round(nodeW * 0.94)}px;
   min-height:${Math.max(36, Math.round(42 * sm))}px;
@@ -624,6 +630,8 @@ function renderNodes(){
         slip.style.background=slipBg;
         slip.style.color=textColorFor(slipBg);
         slip.style.borderColor='rgba(0,0,0,.24)';
+        slip.addEventListener('pointerdown',e=>e.stopPropagation());
+        slip.addEventListener('click',e=>{e.stopPropagation();beginOccupationEdit(id);});
         wrap.appendChild(slip);
       }
       const occ2=(node.meta?.occupation2||'').trim();
@@ -635,6 +643,8 @@ function renderNodes(){
         slip.style.background='rgba(212,168,76,.9)';
         slip.style.color='#1b1110';
         slip.style.borderColor='rgba(0,0,0,.24)';
+        slip.addEventListener('pointerdown',e=>e.stopPropagation());
+        slip.addEventListener('click',e=>{e.stopPropagation();beginSecondOccupationEdit(id);});
         wrap.appendChild(slip);
       }
     }
