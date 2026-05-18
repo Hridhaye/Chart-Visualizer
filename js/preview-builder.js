@@ -625,11 +625,15 @@ function renderNodes(){
     } else {
       const d=document.createElement('div');
       d.className='node '+sc2(node.name);
-      d.addEventListener('pointerdown',e=>beginHoldReparent(e,id));
+      d.addEventListener('pointerdown',e=>{e.stopPropagation();beginHoldReparent(e,id);});
       d.addEventListener('click',e=>{
         e.stopPropagation();
         if(performance.now()<suppressNodeClickUntil) return;
-        selId=id; updateSelection(); post({type:'select-node',id});
+        selId=id;
+        renamingId=null; 
+        occupationEditingId=null; 
+        secondOccupationEditingId=null;
+        renderNodes(); post({type:'select-node',id});
       });
       buildCardContent(d, node);
       wrap.appendChild(d);
