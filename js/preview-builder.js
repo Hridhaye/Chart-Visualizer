@@ -150,26 +150,46 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 
 .node.double-occupation{box-shadow:0 0 0 2px rgba(212,168,76,.3),0 1px 2px rgba(0,0,0,.08)}
 .double-occupation-badge,
-.special-emblem{
+.special-emblem,
+.notable-badge,
+.rank-badge{
   display:none;
   position:absolute;
-  width:24px;
-  height:24px;
+  width:var(--symbol-size,24px);
+  height:var(--symbol-size,24px);
   align-items:center;
   justify-content:center;
   pointer-events:none;
-  background:currentColor;
+  font-size:calc(var(--symbol-size,24px) * 0.65);
+  font-weight:700;
+  line-height:1;
+  color:currentColor;
 }
 .double-occupation-badge{
   top:8px;right:8px;
   border-radius:50%;
+  background:rgba(0,0,0,0.1);
 }
 .special-emblem{
   top:8px;left:8px;
-  transform: rotate(45deg);
+  /* transform: rotate(45deg); */ /* Removed to make it straight */
+  background:rgba(0,0,0,0.1);
+}
+.notable-badge{
+  background:rgba(0,0,0,0.1);
+  right:8px;
+  bottom:8px;
+}
+.rank-badge{
+  background:rgba(0,0,0,0.1);
+  left:8px;
+  bottom:8px;
+  border-radius:50%;
 }
 .double-occupation-badge.visible,
-.special-emblem.visible{display:flex}
+.special-emblem.visible,
+.notable-badge.visible,
+.rank-badge.visible{display:flex}
 
 /* ── Action bar ── */
 .node-actions{display:none;align-items:center;gap:${actGap}px;
@@ -348,7 +368,7 @@ function post(msg){window.parent.postMessage(msg,'*');}
 function act(id,action,extras){post({type:'node-action',id,action,...(extras||{})});}
 
 /* ── Drag-reparent state ── */
-let selId=INIT_SEL, renamingId=null, focusRenameId=null, occupationEditingId=null, focusOccId=null, secondOccupationEditingId=null, focusOcc2Id=null;
+let selId=INIT_SEL, renamingId=null, focusRenameId=null, occupationEditingId=null, focusOccId=null, secondOccupationEditingId=null, focusOcc2Id=null, rankEditingId=null, focusRankId=null;
 let suppressSceneClick=false, suppressNodeClickUntil=0;
 const REPAR_HOLD_MS=260, REPAR_MOVE_TOL=8;
 let holdDrag=null;
@@ -383,7 +403,7 @@ function pickTarget(cx,cy,src){
 }
 function beginHoldReparent(e,id){
   if(e.pointerType==='mouse'&&e.button!==0) return;
-  if(renamingId!==null||occupationEditingId!==null) return;
+  if(renamingId!==null||occupationEditingId!==null||secondOccupationEditingId!==null||rankEditingId!==null) return;
   const wrap=wrapById(id); if(!wrap) return;
   const nodeEl=wrap.querySelector('.node'); if(!nodeEl) return;
   // NOTE: do NOT stopPropagation or setPointerCapture here — the scene needs
@@ -495,6 +515,24 @@ function cancelSecondOccupationEdit(){
   secondOccupationEditingId=null; focusOcc2Id=null; renderNodes();
 }
 
+function beginRankEdit(id){
+  selId=id;
+  renamingId=null; focusRenameId=null;
+  occupationEditingId=null; focusOccId=null;
+  secondOccupationEditingId=null; focusOcc2Id=null;
+  rankEditingId=id; focusRankId=id;
+  updateSelection(); renderNodes();
+  post({type:'select-node',id});
+}
+function commitRank(id, sel){
+  const value=(sel.value||'').trim();
+  rankEditingId=null; focusRankId=null; renderNodes();
+  act(id,'set-rank',{value});
+}
+function cancelRankEdit(){
+  rankEditingId=null; focusRankId=null; renderNodes();
+}
+
 /* ── Card DOM builder ──
    THIS IS THE FUNCTION TO EDIT when adding occupation / rebirth fields.
    It builds the inner content of each .node div.
@@ -505,6 +543,13 @@ function buildCardContent(nodeEl, node){
   const bgColor = NODE_COLOR_MAP[sc2(node.name)] || '#ffffff';
   const fg=textColorFor(bgColor);
   const hasDouble = !!(node.meta?.occupation2);
+  const hasEmblem = !!node.meta?.emblem;
+  const hasNotable = !!node.meta?.notable;
+  const rank = (node.meta?.rank === 'ascended' || node.meta?.rank === 'sentinel') ? node.meta.rank : '';
+  const hasRank = !!rank;
+  const symbolCount = (hasDouble ? 1 : 0) + (hasEmblem ? 1 : 0) + (hasNotable ? 1 : 0) + (hasRank ? 1 : 0);
+  const symbolSize = symbolCount >= 4 ? 22 : (symbolCount >= 3 ? 24 : (symbolCount === 2 ? 28 : 32));
+  nodeEl.style.setProperty('--symbol-size', symbolSize + 'px');
 
   if(hasDouble) nodeEl.classList.add('double-occupation');
 
@@ -517,14 +562,30 @@ function buildCardContent(nodeEl, node){
   // Double-occupation badge
   const occ2Badge=document.createElement('div');
   occ2Badge.className='double-occupation-badge'+(hasDouble ? ' visible' : '');
+  occ2Badge.textContent='R';
   occ2Badge.style.color=fg;
   nodeEl.appendChild(occ2Badge);
 
   // Emblem badge
   const emblemEl=document.createElement('div');
-  emblemEl.className='special-emblem'+(node.meta?.emblem ? ' visible' : '');
+  emblemEl.className='special-emblem'+(hasEmblem ? ' visible' : '');
+  emblemEl.textContent='Rc';
   emblemEl.style.color=fg;
   nodeEl.appendChild(emblemEl);
+
+  // Notable badge
+  const notableEl=document.createElement('div');
+  notableEl.className='notable-badge'+(hasNotable ? ' visible' : '');
+  notableEl.textContent='N';
+  notableEl.style.color=fg;
+  nodeEl.appendChild(notableEl);
+
+  // Rank badge (Ascended -> A, Sentinel -> S)
+  const rankEl=document.createElement('div');
+  rankEl.className='rank-badge'+(hasRank ? ' visible' : '');
+  rankEl.textContent=rank==='ascended' ? 'A' : (rank==='sentinel' ? 'S' : '');
+  rankEl.style.color=fg;
+  nodeEl.appendChild(rankEl);
 
   // Rebirth badge (hidden until meta.reborn is true)
   const rebirthEl=document.createElement('div');
@@ -615,6 +676,31 @@ function renderNodes(){
       if(focusOccId===id){
         requestAnimationFrame(()=>{sel.focus();focusOccId=null;});
       }
+    } else if(rankEditingId===id){
+      const sel=document.createElement('select');
+      sel.className='node-occ-select node-inline-editor';
+      const empty=document.createElement('option');
+      empty.value=''; empty.textContent='(No rank)';
+      sel.appendChild(empty);
+      for(const r of [['ascended','Ascended'],['sentinel','Sentinel']]){
+        const opt=document.createElement('option');
+        opt.value=r[0];
+        opt.textContent=r[1];
+        sel.appendChild(opt);
+      }
+      sel.value=(node.meta?.rank||'').trim();
+      sel.addEventListener('pointerdown',e=>e.stopPropagation());
+      sel.addEventListener('click',e=>e.stopPropagation());
+      sel.addEventListener('blur',()=>commitRank(id,sel));
+      sel.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commitRank(id,sel);}
+        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancelRankEdit();}
+      });
+      sel.addEventListener('change',()=>commitRank(id,sel));
+      wrap.appendChild(sel);
+      if(focusRankId===id){
+        requestAnimationFrame(()=>{sel.focus();focusRankId=null;});
+      }
     } else if(secondOccupationEditingId===id){
       const sel=document.createElement('select');
       sel.className='node-occ-select node-inline-editor';
@@ -648,9 +734,10 @@ function renderNodes(){
         e.stopPropagation();
         if(performance.now()<suppressNodeClickUntil) return;
         selId=id;
-        renamingId=null; 
-        occupationEditingId=null; 
+        renamingId=null;
+        occupationEditingId=null;
         secondOccupationEditingId=null;
+        rankEditingId=null;
         renderNodes(); post({type:'select-node',id});
       });
       buildCardContent(d, node);
@@ -703,6 +790,8 @@ function renderNodes(){
     if(parentNode?.meta?.occupation2){
       acts.appendChild(mkBtn('★','Toggle emblem',()=>act(id,'toggle-emblem')));
     }
+    acts.appendChild(mkBtn('N','Toggle notable',()=>act(id,'toggle-notable')));
+    acts.appendChild(mkBtn('AS','Set rank (Ascended / Sentinel)',()=>beginRankEdit(id)));
     if(parentId!==undefined) acts.appendChild(mkBtn('×','Delete',()=>act(id,'delete')));
     wrap.appendChild(acts);
     nl.appendChild(wrap);
@@ -779,6 +868,7 @@ let vx=0,vy=0,rafId=null;
 let tapStartX=0,tapStartY=0,dragMoved=false;
 let panAnchorX=0,panAnchorY=0,camAnchorX=0,camAnchorY=0,lastPanX=0,lastPanY=0;
 let pinchActive=false,pinch0d=0,pinch0z=0,pinch0mx=0,pinch0my=0,pinchCam0x=0,pinchCam0y=0;
+let lastPanMoveAt=0;
 const PINCH_DAMPEN=0.85;
 const PINCH_INTENT_PX=2;
 const PINCH_PAN_DAMPEN=0.85;
@@ -797,6 +887,8 @@ function readVel(){
 
 /* Momentum */
 const FRICTION=0.84,VEL_MIN=0.35,VEL_MAX=18;
+const MOMENTUM_RELEASE_IDLE_MS=90;
+const MOMENTUM_RELEASE_MIN=0.55;
 function momentumTick(){
   vx*=FRICTION;vy*=FRICTION;
   if(Math.abs(vx)<VEL_MIN&&Math.abs(vy)<VEL_MIN){rafId=null;sendCam();return;}
@@ -850,6 +942,7 @@ sc.addEventListener('pointermove',e=>{
     const p=ptrs.get(e.pointerId);
     const fdx=p.x-lastPanX,fdy=p.y-lastPanY;
     if(Math.hypot(p.x-tapStartX,p.y-tapStartY)>6) dragMoved=true;
+    if(Math.abs(fdx)>0.01||Math.abs(fdy)>0.01) lastPanMoveAt=performance.now();
     pushVelSample(fdx,fdy);lastPanX=p.x;lastPanY=p.y;
     cam.x=camAnchorX+(p.x-panAnchorX);cam.y=camAnchorY+(p.y-panAnchorY);
     applyTransform();
@@ -880,7 +973,16 @@ function endPtr(e){
   if(ptrs.size===0){
     sc.classList.remove('dragging');pinchActive=false;
     suppressSceneClick=dragMoved;
-    const vel=readVel();vx=vel.x;vy=vel.y;launchMomentum();resetVelBuf();
+    const vel=readVel();
+    const idleFor=performance.now()-lastPanMoveAt;
+    if(idleFor>MOMENTUM_RELEASE_IDLE_MS){
+      vx=0;vy=0;stopMomentum();
+    }else{
+      vx=vel.x;vy=vel.y;
+      if(Math.hypot(vx,vy)<MOMENTUM_RELEASE_MIN){vx=0;vy=0;stopMomentum();}
+      else launchMomentum();
+    }
+    resetVelBuf();
     setTimeout(()=>{suppressSceneClick=false;},0);
   } else if(ptrs.size===1){pinchActive=false;resetVelBuf();snapshotPan();dragMoved=true;}
 }

@@ -13,6 +13,8 @@
  *     occupation?: string          — god-vocation text (upcoming)
  *     occupation2?: string         — secondary occupation for special dual-occupation cards
  *     emblem?: boolean             — marks a node with a special child/emblem indicator
+ *     notable?: boolean            — marks a node/card as notable
+ *     rank?: 'ascended' | 'sentinel' — special rank shown as A/S badge
  *   }
  */
 

@@ -331,6 +331,30 @@ window.addEventListener('message', e => {
         schedulePreviewUpdate();
         break;
       }
+      case 'set-rank': {
+        const node = find(id, root);
+        if (!node) break;
+        const raw = String(e.data.value || '').trim().toLowerCase();
+        const next = (raw === 'ascended' || raw === 'sentinel') ? raw : '';
+        const prev = String(node.meta?.rank || '').trim();
+        if (next === prev) break;
+        pushUndoState(ctx);
+        const meta = { ...node.meta };
+        if (next) meta.rank = next; else delete meta.rank;
+        node.meta = meta;
+        renderAll();
+        schedulePreviewUpdate();
+        break;
+      }
+      case 'toggle-notable': {
+        const node = find(id, root);
+        if (!node) break;
+        pushUndoState(ctx);
+        node.meta = { ...node.meta, notable: !node.meta?.notable };
+        renderAll();
+        schedulePreviewUpdate();
+        break;
+      }
     }
   }
 });
@@ -743,6 +767,12 @@ function hydrateSyncUi(cfg) {
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 document.addEventListener('keydown', e => {
+  // Do not intercept shortcuts if the user is currently typing in an input, 
+  // textarea, or any other editable element.
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) {
+    return;
+  }
+
   // Undo: Ctrl/Cmd+Z
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();

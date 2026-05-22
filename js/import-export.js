@@ -26,6 +26,8 @@ function canonicalizeKey(key) {
     k === 'secondemblem' ||
     k === 'emblem'
   ) return 'emblem';
+  if (k === 'notable' || k === 'isnotable') return 'notable';
+  if (k === 'rank' || k === 'class' || k === 'tier') return 'rank';
   return '';
 }
 
@@ -46,6 +48,11 @@ function parseNodeLine(line) {
     if (key === 'occupation') meta.occupation = rawValue;
     else if (key === 'occupation2') meta.occupation2 = rawValue;
     else if (key === 'emblem') meta.emblem = parseBool(rawValue);
+    else if (key === 'notable') meta.notable = parseBool(rawValue);
+    else if (key === 'rank') {
+      const v = String(rawValue || '').trim().toLowerCase();
+      if (v === 'ascended' || v === 'sentinel') meta.rank = v;
+    }
   }
 
   return { name, meta };
@@ -59,6 +66,9 @@ function normalizeMeta(meta) {
     if (occupation) out.occupation = occupation;
     if (occupation2) out.occupation2 = occupation2;
     if (meta.emblem) out.emblem = true;
+    if (meta.notable) out.notable = true;
+    const rank = String(meta.rank || '').trim().toLowerCase();
+    if (rank === 'ascended' || rank === 'sentinel') out.rank = rank;
   }
   return out;
 }
@@ -66,7 +76,7 @@ function normalizeMeta(meta) {
 /**
  * Parse indented text into a root node.
  * Format:
- *   Name | occupation: X | secondOccupation: Y | secondOccupationChild: true
+ *   Name | occupation: X | secondOccupation: Y | secondOccupationChild: true | notable: true
  * Indentation: 2 spaces per level (tabs count as 2 spaces).
  */
 export function parseIndentedText(text) {
@@ -159,6 +169,11 @@ function metaSuffix(node) {
   if (occupation) parts.push(`occupation: ${occupation}`);
   if (occupation2) parts.push(`secondOccupation: ${occupation2}`);
   if (node.meta?.emblem) parts.push('secondOccupationChild: true');
+  if (node.meta?.notable) parts.push('notable: true');
+  const rank = String(node.meta?.rank || '').trim().toLowerCase();
+  if (rank === 'ascended' || rank === 'sentinel') {
+    parts.push(`rank: ${rank === 'ascended' ? 'Ascended' : 'Sentinel'}`);
+  }
   return parts.length ? ' | ' + parts.join(' | ') : '';
 }
 
@@ -189,7 +204,7 @@ export function exportToIndentedText(root) {
 
   const header = [
     '# Family tree as an edge list. Each line is one parent-child relationship:',
-    '#   Parent >> Child              (optionally: | occupation: X | secondOccupation: Y | secondOccupationChild: true)',
+    '#   Parent >> Child              (optionally: | occupation: X | secondOccupation: Y | secondOccupationChild: true | notable: true | rank: Ascended|Sentinel)',
     '# Sibling order = order of appearance under each parent.',
     '# The root is the node that never appears on the right side of ">>".',
     '# A "!ROOT Name | attrs" line (if present) sets attributes on the root.',
