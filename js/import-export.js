@@ -1,10 +1,12 @@
 /**
  * import-export.js
- * Utilities for importing indented-text trees and exporting relationship arrays.
- * No DOM side-effects; callers wire these to buttons.
+ * Utilities for importing trees (path-list or legacy indented) and exporting
+ * relationship arrays. No DOM side-effects; callers wire these to buttons.
  */
 
 import { makeNode, toRelationships } from './data.js';
+
+const PATH_SEP = ' > ';
 
 // Indented text -> tree
 
@@ -122,46 +124,139 @@ export function parseIndentedText(text) {
 }
 
 /**
- * Parse and build a root node from indented text.
+ * Parse and build a root node from text. Auto-detects format:
+ *   - Path-list (e.g. "Root > Child > Grandchild") — preferred, copy/paste-safe.
+ *   - Legacy indented text (2 spaces per level) — still accepted.
  * Returns { root, nodeCount, pairCount, occupations } or null if not enough content.
  */
 export function importFromIndentedText(text) {
   const trimmed = (text || '').trim();
-  const parsed = parseIndentedText(trimmed);
+  if (!trimmed) return null;
+
+  const looksLikePathList = trimmed
+    .split('\n')
+    .some(l => {
+      const t = l.trim();
+      if (!t || t.startsWith('#') || t.startsWith('//')) return false;
+      const beforeAttrs = t.split('|')[0];
+      return beforeAttrs.includes('>');
+    });
+
+  const parsed = looksLikePathList
+    ? parsePathList(trimmed)
+    : parseIndentedText(trimmed);
+
   if (!parsed.root || parsed.nodeCount < 2 || parsed.pairCount < 1) return null;
   return parsed;
 }
 
-// Tree -> indented text
+// Tree -> path list (preferred, copy/paste-safe)
+
+function metaSuffix(node) {
+  const parts = [];
+  const occupation = String(node.meta?.occupation || '').trim();
+  const occupation2 = String(node.meta?.occupation2 || '').trim();
+  if (occupation) parts.push(`occupation: ${occupation}`);
+  if (occupation2) parts.push(`secondOccupation: ${occupation2}`);
+  if (node.meta?.emblem) parts.push('secondOccupationChild: true');
+  return parts.length ? ' | ' + parts.join(' | ') : '';
+}
 
 /**
- * Serialize a root node back to indented text (2 spaces per level).
+ * Serialize a root node to a path-list. Each line is the full path from root,
+ * parts separated by " > ". Sibling order = order of appearance.
+ *
+ * This format survives copy/paste through chat apps (no leading whitespace to
+ * strip) and is unambiguous for AI models to read and write.
  */
 export function exportToIndentedText(root) {
-  function metaSuffix(node) {
-    const parts = [];
-    const occupation = String(node.meta?.occupation || '').trim();
-    const occupation2 = String(node.meta?.occupation2 || '').trim();
-    if (occupation) parts.push(`occupation: ${occupation}`);
-    if (occupation2) parts.push(`secondOccupation: ${occupation2}`);
-    if (node.meta?.emblem) parts.push('secondOccupationChild: true');
-    return parts.length ? ' | ' + parts.join(' | ') : '';
-  }
-
   const lines = [];
-  function walk(node, depth) {
-    lines.push(' '.repeat(depth * 2) + node.name + metaSuffix(node));
-    for (const c of node.children) walk(c, depth + 1);
+  function walk(node, ancestry) {
+    const path = ancestry ? ancestry + PATH_SEP + node.name : node.name;
+    lines.push(path + metaSuffix(node));
+    for (const c of node.children) walk(c, path);
   }
-
-  walk(root, 0);
+  walk(root, '');
 
   const header = [
-    '# Indent indicates parent-child relationship. Same indent = siblings.',
-    '# Optional attributes per line: | occupation: ... | secondOccupation: ... | secondOccupationChild: true|false',
+    '# Family tree as path list. Each line is the full path from the root.',
+    '# Path parts are separated by " > ". Sibling order = order of appearance.',
+    '# Optional attributes after " | ": occupation: X | secondOccupation: Y | secondOccupationChild: true',
+    '# Lines starting with # are ignored.',
   ].join('\n');
 
   return header + '\n\n' + lines.join('\n');
+}
+
+/**
+ * Parse a path-list back into a tree.
+ * Each non-comment line: "A > B > C | optional attrs"
+ * Order of lines determines sibling order. Parents are auto-created if a child
+ * appears before its parent line, but normal exports always list parents first.
+ */
+export function parsePathList(text) {
+  const nodeByPath = new Map(); // full path string -> node
+  let root = null;
+  let nodeCount = 0;
+  let pairCount = 0;
+  const occupations = new Set();
+
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#') || line.startsWith('//')) continue;
+
+    const pipeIdx = line.indexOf('|');
+    const pathStr = (pipeIdx === -1 ? line : line.slice(0, pipeIdx)).trim();
+    const attrStr = pipeIdx === -1 ? '' : line.slice(pipeIdx); // includes leading |
+    if (!pathStr) continue;
+
+    const parts = pathStr.split('>').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) continue;
+
+    // Walk/create ancestors so out-of-order lines still work.
+    let parentNode = null;
+    let parentPath = '';
+    for (let i = 0; i < parts.length; i++) {
+      const name = parts[i];
+      const fullPath = parentPath ? parentPath + PATH_SEP + name : name;
+      let node = nodeByPath.get(fullPath);
+      const isLast = i === parts.length - 1;
+
+      if (!node) {
+        node = makeNode(name);
+        nodeByPath.set(fullPath, node);
+        nodeCount += 1;
+        if (parentNode) {
+          parentNode.children.push(node);
+          pairCount += 1;
+        } else if (!root) {
+          root = node;
+        } else if (root.name !== name) {
+          // Multiple roots — attach under existing root to keep one tree.
+          root.children.push(node);
+          pairCount += 1;
+        }
+      }
+
+      if (isLast && attrStr) {
+        const { meta } = parseNodeLine(name + ' ' + attrStr);
+        node.meta = normalizeMeta(meta);
+        if (node.meta.occupation) occupations.add(node.meta.occupation);
+        if (node.meta.occupation2) occupations.add(node.meta.occupation2);
+      }
+
+      parentNode = node;
+      parentPath = fullPath;
+    }
+  }
+
+  return {
+    root,
+    nodeCount,
+    pairCount,
+    occupations: [...occupations].sort((a, b) => a.localeCompare(b)),
+  };
 }
 
 // Relationship array export (for pasting into HTML files)

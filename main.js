@@ -506,17 +506,19 @@ document.getElementById('btnCopy').addEventListener('click', () => {
 
 document.getElementById('btnPrintText').addEventListener('click', () => {
   const text = exportToIndentedText(root);
-  importInput.value = text;
-  setBottomOpen(true);
-  if (!importBody.classList.contains('open')) {
-    importBody.classList.add('open');
-    importArrow.classList.add('open');
-  }
-  importInput.dispatchEvent(new Event('input', { bubbles: true }));
-  const b = document.getElementById('btnPrintText');
-  const prev = b.textContent;
-  b.textContent = 'Inserted ✓';
-  setTimeout(() => b.textContent = prev, 1500);
+  navigator.clipboard.writeText(text).then(() => {
+    importInput.value = text;
+    setBottomOpen(true);
+    if (!importBody.classList.contains('open')) {
+      importBody.classList.add('open');
+      importArrow.classList.add('open');
+    }
+    importInput.dispatchEvent(new Event('input', { bubbles: true }));
+    const b = document.getElementById('btnPrintText');
+    const prev = b.textContent;
+    b.textContent = 'Copied & Inserted ✓';
+    setTimeout(() => b.textContent = prev, 1500);
+  });
 });
 
 // ── Cloud sync config ─────────────────────────────────────────────────────────
