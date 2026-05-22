@@ -94,7 +94,7 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 
 /* ── Node card ── */
 .node-wrap{position:absolute;transform:translateX(-50%);
-  display:flex;flex-direction:column;align-items:center;gap:10px;z-index:1}
+  display:flex;flex-direction:column;align-items:center;gap:12px;z-index:1}
 .node-wrap.selected{z-index:2500}
 .node{
   position:relative;
@@ -182,30 +182,25 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   display:flex;align-items:center;justify-content:center;cursor:pointer}
 .node-btn:hover,.node-btn:active{background:rgba(212,168,76,.22);color:#f6d183}
 .node-btn.disabled{opacity:.38;pointer-events:none}
-.node-input{
-  width:${Math.round(nodeW * 0.94)}px;
-  min-height:${Math.max(36, Math.round(42 * sm))}px;
-  padding:${Math.max(8, Math.round(8 * sm))}px ${Math.max(10, Math.round(10 * sm))}px;
-  border:2px solid rgba(212,168,76,.92);border-radius:8px;
-  background:rgba(24,22,20,.96);color:#f0e5cf;
-  font:700 ${Math.max(12, Math.round(13 * sm))}px/1.15 Arial,sans-serif;text-align:center;
-  outline:none;box-shadow:0 12px 26px rgba(0,0,0,.34);
-  position:relative;z-index:2550;}
-.node-occ-select{
-  width:${Math.round(nodeW * 0.94)}px;
-  min-height:${Math.max(36, Math.round(42 * sm))}px;
-  padding:${Math.max(8, Math.round(8 * sm))}px ${Math.max(10, Math.round(10 * sm))}px;
-  border:2px solid rgba(212,168,76,.72);
+.node-input,
+.node-occ-select,
+.node-inline-editor{
+  width:${Math.round(nodeW * 1.08)}px;
+  min-height:${Math.max(44, Math.round(48 * sm))}px;
+  padding:${Math.max(10, Math.round(10 * sm))}px ${Math.max(12, Math.round(12 * sm))}px;
   border-radius:8px;
   background:rgba(24,22,20,.96);
   color:#f0e5cf;
-  font:700 ${Math.max(12, Math.round(13 * sm))}px/1.15 Arial,sans-serif;
+  font:700 ${Math.max(14, Math.round(14 * sm))}px/1.15 Arial,sans-serif;
   text-align:center;
   outline:none;
   box-shadow:0 12px 26px rgba(0,0,0,.34);
   position:relative;
   z-index:2550;
+  transform-origin:bottom center;
 }
+.node-input{border:2px solid rgba(212,168,76,.92);}
+.node-occ-select{border:2px solid rgba(212,168,76,.72);}
 .node-occ-select option{
   background:#1e1b18;
   color:#f0e5cf;
@@ -214,15 +209,15 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 /* ── Touch overrides ── */
 @media (pointer:coarse){
   .node-actions{gap:${Math.round(8*sm)}px;padding:${Math.round(8*sm)}px ${Math.round(10*sm)}px}
-  .node-btn{width:${Math.round(36*sm)}px;height:${Math.round(36*sm)}px;
-    font-size:${Math.max(15,Math.round(15*sm))}px}
-  .node-input,.node-occ-select{font-size:16px}
+  .node-btn{width:${Math.round(44*sm)}px;height:${Math.round(44*sm)}px;
+    font-size:${Math.max(18,Math.round(18*sm))}px}
+  .node-input,.node-occ-select,.node-inline-editor{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
 }
 @media screen and (max-width:1024px){
   .node-actions{gap:${Math.round(9*sm)}px;padding:${Math.round(9*sm)}px ${Math.round(11*sm)}px}
-  .node-btn{width:${Math.round(40*sm)}px;height:${Math.round(40*sm)}px;
-    font-size:${Math.max(16,Math.round(16*sm))}px}
-  .node-input,.node-occ-select{font-size:16px}
+  .node-btn{width:${Math.round(46*sm)}px;height:${Math.round(46*sm)}px;
+    font-size:${Math.max(19,Math.round(19*sm))}px}
+  .node-input,.node-occ-select,.node-inline-editor{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
 }
 ${colorCSS}`;
 }
@@ -539,12 +534,35 @@ function buildCardContent(nodeEl, node){
 }
 
 /* ── Render nodes ── */
+let actionBtnScale = 1;
+
+function applyActionButtonScale(scale = actionBtnScale) {
+  actionBtnScale = scale;
+  try{
+    for(const a of nl.querySelectorAll('.node-actions')){
+      // Anchor the panel to its top edge so zoom compensation grows downward
+      // instead of sliding up over the inline editor above it.
+      a.style.transformOrigin = 'top center';
+      a.style.transform = 'scale('+scale+')';
+    }
+    for(const el of nl.querySelectorAll('.node-inline-editor')){
+      // Anchor editors to their bottom edge so they expand upward, away from
+      // the action bar below them, while still matching the current zoom.
+      el.style.transformOrigin = 'bottom center';
+      el.style.transform = 'scale('+scale+')';
+    }
+  }catch(e){}
+}
+
 function updateSelection(){
   for(const wrap of nl.children){
     const on=Number(wrap.dataset.id)===selId;
     wrap.classList.toggle('selected',on);
     wrap.querySelector('.node')?.classList.toggle('selected',on);
   }
+  // Keep the latest zoom-compensation applied even when selection rerenders
+  // the node DOM without moving the camera.
+  applyActionButtonScale();
 }
 
 function renderNodes(){
@@ -559,7 +577,7 @@ function renderNodes(){
 
     if(renamingId===id){
       const inp=document.createElement('input');
-      inp.className='node-input'; inp.type='text';
+      inp.className='node-input node-inline-editor'; inp.type='text';
       inp.value=node.name; inp.spellcheck=false;
       inp.addEventListener('pointerdown',e=>e.stopPropagation());
       inp.addEventListener('click',e=>e.stopPropagation());
@@ -743,18 +761,12 @@ function applyTransform(){
   // Clamp the inverse scale so buttons don't become excessively large.
   try{
     const minScale = 1;
-    const maxScale = 1.6; // upper limit for grown buttons
-    const safeZ = Math.max(cam.z, 0.4);
+    const maxScale = 3.4; // allow a larger panel when zoomed far out
+    const safeZ = Math.max(cam.z, 0.18);
     const inv = 1 / safeZ;
-    const btnScale = Math.min(maxScale, Math.max(minScale, inv));
-    for(const a of nl.querySelectorAll('.node-actions')){
-      a.style.transformOrigin = 'center center';
-      a.style.transform = 'scale('+btnScale+')';
-    }
-    for(const el of nl.querySelectorAll('.node-inline-editor')){
-      el.style.transformOrigin = 'center center';
-      el.style.transform = 'scale('+btnScale+')';
-    }
+    const aggressiveInv = Math.pow(inv, 1.22);
+    const btnScale = Math.min(maxScale, Math.max(minScale, aggressiveInv));
+    applyActionButtonScale(btnScale);
   }catch(e){}
   sendCam();
 }
