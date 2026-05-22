@@ -853,7 +853,11 @@ function applyTransform(){
     const maxScale = 3.4; // allow a larger panel when zoomed far out
     const safeZ = Math.max(cam.z, 0.18);
     const inv = 1 / safeZ;
-    const aggressiveInv = Math.pow(inv, 1.22);
+    // Piecewise: track 1/z naturally near 1x; only ramp aggressively once
+    // we're zoomed out past ~0.7x (inv > 1.4). Keeps close-zoom UI from
+    // ballooning while preserving readable buttons at far zoom.
+    const KNEE = 1.4;
+    const aggressiveInv = inv <= KNEE ? inv : KNEE + Math.pow(inv - KNEE, 1.22);
     const btnScale = Math.min(maxScale, Math.max(minScale, aggressiveInv));
     applyActionButtonScale(btnScale);
   }catch(e){}
