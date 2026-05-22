@@ -14,7 +14,8 @@
  * @property {Function} onMoveDown    (id) → void
  */
 
-import { find, findParent, countAll, toRelationships, signOf, flatVisible, colorForNode }
+import { find, findParent, countAll, toRelationships, signOf, flatVisible, colorForNode,
+  splitName, joinName, knownSigns }
   from './data.js';
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -180,28 +181,124 @@ function _renderLegend(legendEl, root) {
  * Replace the label in the tree row for `id` with an editable input.
  * onCommit(id, newName) fires when Enter/blur occurs.
  * onCancel()           fires on Escape.
+ *
+ * If `root` is provided and the node being renamed is NOT the root,
+ * the input is split into a sign <select> + name <input>. The root
+ * keeps a single plain input — it's the documented "Founding Father"
+ * exception and not worth special-casing the split for.
+ *
+ * Reliability: on commit, we use joinName(sign, rest); if that yields
+ * an empty string we fall back to whatever was in the rest field so
+ * the user never silently loses their input.
  */
-export function startPanelRename(treeEl, id, node, onCommit, onCancel) {
+export function startPanelRename(treeEl, id, node, onCommit, onCancel, root) {
   const row = treeEl.querySelector(`[data-id="${id}"]`);
   if (!row) return;
   const lbl     = row.querySelector('.node-label');
   const oldName = node.name;
+  const isRoot  = !!root && node === root;
 
-  const inp = document.createElement('input');
-  inp.className   = 'node-input';
-  inp.value       = oldName;
-  inp.spellcheck  = false;
-  lbl.replaceWith(inp);
-  inp.focus();
-  inp.select();
-
-  function commit() {
-    onCommit(id, inp.value.trim());
+  if (isRoot) {
+    // Plain input for root (preserves the "Founding Father" exception cleanly).
+    const inp = document.createElement('input');
+    inp.className   = 'node-input';
+    inp.value       = oldName;
+    inp.spellcheck  = false;
+    lbl.replaceWith(inp);
+    inp.focus();
+    inp.select();
+    inp.addEventListener('blur', () => onCommit(id, inp.value.trim()));
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); onCommit(id, inp.value.trim()); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); }
+    });
+    return;
   }
 
-  inp.addEventListener('blur', commit);
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); commit(); }
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); }
+  const { sign: curSign, rest: curRest } = splitName(oldName);
+  const signs = root ? knownSigns(root) : [];
+  // Ensure the current sign is in the list even if it's somehow not (defensive).
+  if (curSign && !signs.includes(curSign)) signs.push(curSign);
+
+  const wrap = document.createElement('span');
+  wrap.className = 'rename-split';
+
+  const sel = document.createElement('select');
+  sel.className = 'rename-sign';
+  for (const s of signs) {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    sel.appendChild(opt);
+  }
+  const otherOpt = document.createElement('option');
+  otherOpt.value = '__other__'; otherOpt.textContent = 'Other…';
+  sel.appendChild(otherOpt);
+  sel.value = curSign && signs.includes(curSign) ? curSign : (signs[0] || '__other__');
+
+  // A free-text sign input — hidden unless "Other…" is chosen or no signs exist.
+  const signInp = document.createElement('input');
+  signInp.type = 'text';
+  signInp.className = 'rename-sign';
+  signInp.spellcheck = false;
+  signInp.placeholder = 'Sign';
+  signInp.value = (sel.value === '__other__') ? curSign : '';
+  signInp.style.display = (sel.value === '__other__') ? '' : 'none';
+
+  const rest = document.createElement('input');
+  rest.type = 'text';
+  rest.className = 'node-input rename-rest';
+  rest.spellcheck = false;
+  rest.value = curRest;
+  rest.placeholder = 'Name';
+
+  wrap.appendChild(sel);
+  wrap.appendChild(signInp);
+  wrap.appendChild(rest);
+  lbl.replaceWith(wrap);
+
+  // Focus the name field — most common edit. Select for easy overwrite.
+  requestAnimationFrame(() => { rest.focus(); rest.select(); });
+
+  let committed = false;
+  function commit() {
+    if (committed) return;  // guard against blur firing after Enter
+    committed = true;
+    const signRaw = (sel.value === '__other__') ? signInp.value : sel.value;
+    const joined = joinName(signRaw, rest.value);
+    // Reliability fallback: if joinName yields empty (e.g. both blank),
+    // pass whatever the user actually typed in the name field — never lose input.
+    const finalName = joined || rest.value.trim();
+    onCommit(id, finalName);
+  }
+  function cancel() {
+    if (committed) return;
+    committed = true;
+    onCancel();
+  }
+
+  sel.addEventListener('change', () => {
+    if (sel.value === '__other__') {
+      signInp.style.display = '';
+      requestAnimationFrame(() => signInp.focus());
+    } else {
+      signInp.style.display = 'none';
+    }
   });
+
+  // Blur-to-commit, but only when focus actually leaves the wrapper.
+  function onBlur() {
+    setTimeout(() => {
+      if (!wrap.contains(document.activeElement)) commit();
+    }, 0);
+  }
+  sel.addEventListener('blur', onBlur);
+  signInp.addEventListener('blur', onBlur);
+  rest.addEventListener('blur', onBlur);
+
+  for (const el of [sel, signInp, rest]) {
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
+    });
+  }
 }

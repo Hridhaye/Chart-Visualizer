@@ -148,6 +148,48 @@ export function allColorMap() {
   return { ...SIGN_COLORS, ..._autoColorMap };
 }
 
+/**
+ * Split a node name into { sign, rest } for the rename UI.
+ * "Founding Father" is the documented root special case: sign = "Founding", rest = "Father".
+ * For any other name, sign is the first word and rest is everything after.
+ * Returns { sign:'', rest:name } for single-word / empty names so the caller can fall back.
+ */
+export function splitName(name) {
+  const n = String(name || '').trim();
+  if (!n) return { sign: '', rest: '' };
+  if (n === 'Founding Father') return { sign: 'Founding', rest: 'Father' };
+  const sp = n.indexOf(' ');
+  if (sp === -1) return { sign: '', rest: n };
+  return { sign: n.slice(0, sp), rest: n.slice(sp + 1).trim() };
+}
+
+/** Recombine a sign + rest into a name. Empty sign falls back to rest alone. */
+export function joinName(sign, rest) {
+  const s = String(sign || '').trim();
+  const r = String(rest || '').trim();
+  if (s === 'Founding' && r === 'Father') return 'Founding Father';
+  if (!s) return r;
+  if (!r) return s;
+  return s + ' ' + r;
+}
+
+/** All signs currently present in the tree (auto-assigned ones included). */
+export function signsInTree(root, out = new Set()) {
+  out.add(signOf(root.name));
+  for (const c of root.children) signsInTree(c, out);
+  return out;
+}
+
+/**
+ * Union of fixed-named signs (SIGN_COLORS) and signs present in the tree,
+ * sorted alphabetically. Used to populate the rename dropdown.
+ */
+export function knownSigns(root) {
+  const set = new Set(Object.keys(SIGN_COLORS));
+  if (root) for (const s of signsInTree(root)) if (s) set.add(s);
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
 // ── Tree from relationship pairs ──────────────────────────────────────────────
 
 export function fromPairs(pairs) {

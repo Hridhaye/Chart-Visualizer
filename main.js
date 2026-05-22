@@ -217,7 +217,8 @@ function panelStartRename(id) {
       editing = null;
       renderAll();
       syncPreviewSelection();
-    }
+    },
+    root
   );
 }
 

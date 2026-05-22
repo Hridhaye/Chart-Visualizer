@@ -17,7 +17,7 @@
  *   { type: 'start-rename', id }
  */
 
-import { serializeNode, allColorMap } from './data.js';
+import { serializeNode, allColorMap, knownSigns } from './data.js';
 
 // ── Card layout constants ─────────────────────────────────────────────────────
 // These are exposed so tests or callers can override without touching the template.
@@ -45,6 +45,8 @@ export function buildChartSrcdoc(rootNode, cameraState, selectedId, spacingMult 
   const occJSON   = JSON.stringify({
     showOccupationSlips: !!options.showOccupationSlips,
     occupations: Array.isArray(options.occupations) ? options.occupations : [],
+    knownSigns: knownSigns(rootNode),
+    rootId: rootNode?.id ?? null,
   });
   const smClamped = Math.min(1.7, Math.max(1.0, spacingMult));
 
@@ -221,6 +223,35 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 }
 .node-input{border:2px solid rgba(212,168,76,.92);}
 .node-occ-select{border:2px solid rgba(212,168,76,.72);}
+
+/* Split rename: sign <select> + name <input>, inside one wrapper sized like .node-inline-editor. */
+.node-rename-split{
+  width:${Math.round(nodeW * 1.65)}px;
+  display:flex;
+  gap:${Math.max(6, Math.round(6 * sm))}px;
+  align-items:stretch;
+  position:relative;
+  z-index:2550;
+  transform-origin:bottom center;
+}
+.node-rename-split .rs-sign,
+.node-rename-split .rs-rest,
+.node-rename-split .rs-sign-text{
+  min-height:${Math.max(44, Math.round(48 * sm))}px;
+  padding:${Math.max(8, Math.round(8 * sm))}px ${Math.max(10, Math.round(10 * sm))}px;
+  border-radius:8px;
+  background:rgba(24,22,20,.96);
+  color:#f0e5cf;
+  font:700 ${Math.max(14, Math.round(14 * sm))}px/1.15 Arial,sans-serif;
+  outline:none;
+  box-shadow:0 12px 26px rgba(0,0,0,.34);
+  border:2px solid rgba(212,168,76,.72);
+  text-align:center;
+}
+.node-rename-split .rs-sign{flex:1 1 50%;min-width:0;}
+.node-rename-split .rs-sign-text{flex:1 1 50%;min-width:0;}
+.node-rename-split .rs-rest{flex:1 1 50%;min-width:0;border-color:rgba(212,168,76,.92);}
+.node-rename-split .rs-sign option{background:#1e1b18;color:#f0e5cf;}
 .node-occ-select option{
   background:#1e1b18;
   color:#f0e5cf;
@@ -231,13 +262,13 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   .node-actions{gap:${Math.round(8*sm)}px;padding:${Math.round(8*sm)}px ${Math.round(10*sm)}px}
   .node-btn{width:${Math.round(44*sm)}px;height:${Math.round(44*sm)}px;
     font-size:${Math.max(18,Math.round(18*sm))}px}
-  .node-input,.node-occ-select,.node-inline-editor{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
+  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
 }
 @media screen and (max-width:1024px){
   .node-actions{gap:${Math.round(9*sm)}px;padding:${Math.round(9*sm)}px ${Math.round(11*sm)}px}
   .node-btn{width:${Math.round(46*sm)}px;height:${Math.round(46*sm)}px;
     font-size:${Math.max(19,Math.round(19*sm))}px}
-  .node-input,.node-occ-select,.node-inline-editor{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
+  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
 }
 ${colorCSS}`;
 }
@@ -272,7 +303,31 @@ const SHOW_OCCUPATION_SLIPS=(typeof PREVIEW_OPTIONS==='object' && !!PREVIEW_OPTI
 const OCCUPATION_OPTIONS=(typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OPTIONS.occupations))
   ? PREVIEW_OPTIONS.occupations.filter(v=>typeof v==='string')
   : [];
+const KNOWN_SIGNS=(typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OPTIONS.knownSigns))
+  ? PREVIEW_OPTIONS.knownSigns.filter(v=>typeof v==='string')
+  : [];
+const ROOT_ID=(typeof PREVIEW_OPTIONS==='object' && typeof PREVIEW_OPTIONS.rootId==='number')
+  ? PREVIEW_OPTIONS.rootId
+  : null;
 const NODE_COLOR_MAP=${colorMapJSON};
+
+/* Split / join — mirrors data.js. Keep behavior identical. */
+function splitName(name){
+  const n=String(name||'').trim();
+  if(!n) return {sign:'',rest:''};
+  if(n==='Founding Father') return {sign:'Founding',rest:'Father'};
+  const sp=n.indexOf(' ');
+  if(sp===-1) return {sign:'',rest:n};
+  return {sign:n.slice(0,sp),rest:n.slice(sp+1).trim()};
+}
+function joinName(sign,rest){
+  const s=String(sign||'').trim();
+  const r=String(rest||'').trim();
+  if(s==='Founding' && r==='Father') return 'Founding Father';
+  if(!s) return r;
+  if(!r) return s;
+  return s+' '+r;
+}
 const SLIP_VERTICAL_CLEARANCE=${Math.max(10, Math.round(nodeH * 0.15))};
 
 function installIOSFocusZoomGuard(){
@@ -480,6 +535,10 @@ function commitRename(id,inp){
   renamingId=null; focusRenameId=null; renderNodes();
   if(value) act(id,'rename-commit',{value});
 }
+function commitRenameSplit(id, value){
+  renamingId=null; focusRenameId=null; renderNodes();
+  if(value) act(id,'rename-commit',{value});
+}
 function cancelRename(){renamingId=null;focusRenameId=null;renderNodes();}
 function beginOccupationEdit(id){
   selId=id;
@@ -606,7 +665,7 @@ function applyActionButtonScale(scale = actionBtnScale) {
       a.style.transformOrigin = 'top center';
       a.style.transform = 'scale('+scale+')';
     }
-    for(const el of nl.querySelectorAll('.node-inline-editor')){
+    for(const el of nl.querySelectorAll('.node-inline-editor, .node-rename-split')){
       // Anchor editors to their bottom edge so they expand upward, away from
       // the action bar below them, while still matching the current zoom.
       el.style.transformOrigin = 'bottom center';
@@ -637,19 +696,115 @@ function renderNodes(){
     wrap.style.top=yOf(id)+'px';
 
     if(renamingId===id){
-      const inp=document.createElement('input');
-      inp.className='node-input node-inline-editor'; inp.type='text';
-      inp.value=node.name; inp.spellcheck=false;
-      inp.addEventListener('pointerdown',e=>e.stopPropagation());
-      inp.addEventListener('click',e=>e.stopPropagation());
-      inp.addEventListener('blur',()=>commitRename(id,inp));
-      inp.addEventListener('keydown',e=>{
-        if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commitRename(id,inp);}
-        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancelRename();}
-      });
-      wrap.appendChild(inp);
-      if(focusRenameId===id){
-        requestAnimationFrame(()=>{inp.focus();inp.select();focusRenameId=null;});
+      const isRoot=(ROOT_ID!==null && id===ROOT_ID);
+      if(isRoot){
+        // Root keeps the plain single input — "Founding Father" is the documented exception.
+        const inp=document.createElement('input');
+        inp.className='node-input node-inline-editor'; inp.type='text';
+        inp.value=node.name; inp.spellcheck=false;
+        inp.addEventListener('pointerdown',e=>e.stopPropagation());
+        inp.addEventListener('click',e=>e.stopPropagation());
+        inp.addEventListener('blur',()=>commitRename(id,inp));
+        inp.addEventListener('keydown',e=>{
+          if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commitRename(id,inp);}
+          if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancelRename();}
+        });
+        wrap.appendChild(inp);
+        if(focusRenameId===id){
+          requestAnimationFrame(()=>{inp.focus();inp.select();focusRenameId=null;});
+        }
+      } else {
+        // Split: sign <select> (+ optional 'Other…' text input) + name <input>.
+        const cur=splitName(node.name);
+        const signs=KNOWN_SIGNS.slice();
+        if(cur.sign && !signs.includes(cur.sign)) signs.push(cur.sign);
+
+        const box=document.createElement('div');
+        box.className='node-rename-split';
+
+        const sel=document.createElement('select');
+        sel.className='rs-sign';
+        for(const s of signs){
+          const opt=document.createElement('option');
+          opt.value=s; opt.textContent=s;
+          sel.appendChild(opt);
+        }
+        const otherOpt=document.createElement('option');
+        otherOpt.value='__other__'; otherOpt.textContent='Other…';
+        sel.appendChild(otherOpt);
+        sel.value=(cur.sign && signs.includes(cur.sign)) ? cur.sign : (signs[0] || '__other__');
+
+        const signInp=document.createElement('input');
+        signInp.type='text';
+        signInp.className='rs-sign-text';
+        signInp.placeholder='Sign';
+        signInp.spellcheck=false;
+        signInp.value=(sel.value==='__other__') ? cur.sign : '';
+        signInp.style.display=(sel.value==='__other__') ? '' : 'none';
+
+        const rest=document.createElement('input');
+        rest.type='text';
+        rest.className='rs-rest';
+        rest.placeholder='Name';
+        rest.spellcheck=false;
+        rest.value=cur.rest;
+
+        box.appendChild(sel);
+        box.appendChild(signInp);
+        box.appendChild(rest);
+
+        // Stop pointer events so the scene doesn't pan or close the editor.
+        for(const el of [box,sel,signInp,rest]){
+          el.addEventListener('pointerdown',e=>e.stopPropagation());
+          el.addEventListener('click',e=>e.stopPropagation());
+        }
+
+        let committed=false;
+        function doCommit(){
+          if(committed) return;
+          committed=true;
+          const signRaw=(sel.value==='__other__') ? signInp.value : sel.value;
+          const joined=joinName(signRaw, rest.value);
+          // Fallback: if joined is empty (both fields blank), don't rename.
+          // If only the name field has content, commitRenameSplit handles it.
+          commitRenameSplit(id, joined || rest.value.trim());
+        }
+        function doCancel(){
+          if(committed) return;
+          committed=true;
+          cancelRename();
+        }
+
+        sel.addEventListener('change',()=>{
+          if(sel.value==='__other__'){
+            signInp.style.display='';
+            requestAnimationFrame(()=>signInp.focus());
+          } else {
+            signInp.style.display='none';
+          }
+        });
+
+        // Commit on blur only when focus actually leaves the wrapper.
+        function onBlur(){
+          setTimeout(()=>{
+            if(!box.contains(document.activeElement)) doCommit();
+          },0);
+        }
+        sel.addEventListener('blur',onBlur);
+        signInp.addEventListener('blur',onBlur);
+        rest.addEventListener('blur',onBlur);
+
+        for(const el of [sel,signInp,rest]){
+          el.addEventListener('keydown',e=>{
+            if(e.key==='Enter'){e.preventDefault();e.stopPropagation();doCommit();}
+            if(e.key==='Escape'){e.preventDefault();e.stopPropagation();doCancel();}
+          });
+        }
+
+        wrap.appendChild(box);
+        if(focusRenameId===id){
+          requestAnimationFrame(()=>{rest.focus();rest.select();focusRenameId=null;});
+        }
       }
     } else if(occupationEditingId===id){
       const sel=document.createElement('select');
