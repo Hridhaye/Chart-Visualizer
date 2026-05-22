@@ -6,7 +6,8 @@
 
 import { makeNode, toRelationships } from './data.js';
 
-const PATH_SEP = ' > ';
+const EDGE_SEP = ' >> ';
+const ROOT_PREFIX = '!ROOT ';
 
 // Indented text -> tree
 
@@ -125,7 +126,7 @@ export function parseIndentedText(text) {
 
 /**
  * Parse and build a root node from text. Auto-detects format:
- *   - Path-list (e.g. "Root > Child > Grandchild") — preferred, copy/paste-safe.
+ *   - Edge list (e.g. "Parent >> Child") — preferred, copy/paste-safe, compact.
  *   - Legacy indented text (2 spaces per level) — still accepted.
  * Returns { root, nodeCount, pairCount, occupations } or null if not enough content.
  */
@@ -133,24 +134,23 @@ export function importFromIndentedText(text) {
   const trimmed = (text || '').trim();
   if (!trimmed) return null;
 
-  const looksLikePathList = trimmed
+  const looksLikeEdgeList = trimmed
     .split('\n')
     .some(l => {
       const t = l.trim();
       if (!t || t.startsWith('#') || t.startsWith('//')) return false;
-      const beforeAttrs = t.split('|')[0];
-      return beforeAttrs.includes('>');
+      return t.includes('>>') || t.startsWith(ROOT_PREFIX);
     });
 
-  const parsed = looksLikePathList
-    ? parsePathList(trimmed)
+  const parsed = looksLikeEdgeList
+    ? parseEdgeList(trimmed)
     : parseIndentedText(trimmed);
 
   if (!parsed.root || parsed.nodeCount < 2 || parsed.pairCount < 1) return null;
   return parsed;
 }
 
-// Tree -> path list (preferred, copy/paste-safe)
+// Tree -> edge list (preferred, copy/paste-safe, compact)
 
 function metaSuffix(node) {
   const parts = [];
@@ -163,91 +163,117 @@ function metaSuffix(node) {
 }
 
 /**
- * Serialize a root node to a path-list. Each line is the full path from root,
- * parts separated by " > ". Sibling order = order of appearance.
+ * Serialize a root node to an edge list. Each line is one parent-child edge:
+ *   "Parent >> Child | optional attrs on child"
+ * Sibling order = order of appearance. The root is the node that never appears
+ * as a child; an optional "!ROOT Name | attrs" line carries root attributes.
  *
  * This format survives copy/paste through chat apps (no leading whitespace to
- * strip) and is unambiguous for AI models to read and write.
+ * strip), stays compact at any depth, and is easy for AI models to generate
+ * and edit (one line = one relationship).
  */
 export function exportToIndentedText(root) {
   const lines = [];
-  function walk(node, ancestry) {
-    const path = ancestry ? ancestry + PATH_SEP + node.name : node.name;
-    lines.push(path + metaSuffix(node));
-    for (const c of node.children) walk(c, path);
+  const rootSuffix = metaSuffix(root);
+  if (rootSuffix || root.children.length === 0) {
+    lines.push(ROOT_PREFIX + root.name + rootSuffix);
   }
-  walk(root, '');
+
+  function walk(node) {
+    for (const c of node.children) {
+      lines.push(node.name + EDGE_SEP + c.name + metaSuffix(c));
+      walk(c);
+    }
+  }
+  walk(root);
 
   const header = [
-    '# Family tree as path list. Each line is the full path from the root.',
-    '# Path parts are separated by " > ". Sibling order = order of appearance.',
-    '# Optional attributes after " | ": occupation: X | secondOccupation: Y | secondOccupationChild: true',
-    '# Lines starting with # are ignored.',
+    '# Family tree as an edge list. Each line is one parent-child relationship:',
+    '#   Parent >> Child              (optionally: | occupation: X | secondOccupation: Y | secondOccupationChild: true)',
+    '# Sibling order = order of appearance under each parent.',
+    '# The root is the node that never appears on the right side of ">>".',
+    '# A "!ROOT Name | attrs" line (if present) sets attributes on the root.',
+    '# Lines starting with # are ignored. Node names are treated as unique identifiers.',
   ].join('\n');
 
   return header + '\n\n' + lines.join('\n');
 }
 
 /**
- * Parse a path-list back into a tree.
- * Each non-comment line: "A > B > C | optional attrs"
- * Order of lines determines sibling order. Parents are auto-created if a child
- * appears before its parent line, but normal exports always list parents first.
+ * Parse an edge list back into a tree.
+ * Lines: "Parent >> Child | optional attrs"  or  "!ROOT Name | optional attrs"
+ * Node names are unique identifiers. Order of edges = sibling order.
  */
-export function parsePathList(text) {
-  const nodeByPath = new Map(); // full path string -> node
-  let root = null;
+export function parseEdgeList(text) {
+  const nodeByName = new Map();
+  const childSet = new Set();
   let nodeCount = 0;
   let pairCount = 0;
   const occupations = new Set();
+  let explicitRootName = null;
+
+  function getOrCreate(name) {
+    let n = nodeByName.get(name);
+    if (!n) {
+      n = makeNode(name);
+      nodeByName.set(name, n);
+      nodeCount += 1;
+    }
+    return n;
+  }
+
+  function applyAttrs(node, attrStr) {
+    if (!attrStr) return;
+    const { meta } = parseNodeLine(node.name + ' ' + attrStr);
+    node.meta = normalizeMeta(meta);
+    if (node.meta.occupation) occupations.add(node.meta.occupation);
+    if (node.meta.occupation2) occupations.add(node.meta.occupation2);
+  }
 
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith('#') || line.startsWith('//')) continue;
 
-    const pipeIdx = line.indexOf('|');
-    const pathStr = (pipeIdx === -1 ? line : line.slice(0, pipeIdx)).trim();
-    const attrStr = pipeIdx === -1 ? '' : line.slice(pipeIdx); // includes leading |
-    if (!pathStr) continue;
+    if (line.startsWith(ROOT_PREFIX)) {
+      const rest = line.slice(ROOT_PREFIX.length).trim();
+      const pipeIdx = rest.indexOf('|');
+      const name = (pipeIdx === -1 ? rest : rest.slice(0, pipeIdx)).trim();
+      const attrStr = pipeIdx === -1 ? '' : rest.slice(pipeIdx);
+      if (!name) continue;
+      const node = getOrCreate(name);
+      applyAttrs(node, attrStr);
+      explicitRootName = name;
+      continue;
+    }
 
-    const parts = pathStr.split('>').map(s => s.trim()).filter(Boolean);
-    if (parts.length === 0) continue;
+    const sepIdx = line.indexOf('>>');
+    if (sepIdx === -1) continue;
 
-    // Walk/create ancestors so out-of-order lines still work.
-    let parentNode = null;
-    let parentPath = '';
-    for (let i = 0; i < parts.length; i++) {
-      const name = parts[i];
-      const fullPath = parentPath ? parentPath + PATH_SEP + name : name;
-      let node = nodeByPath.get(fullPath);
-      const isLast = i === parts.length - 1;
+    const parentName = line.slice(0, sepIdx).trim();
+    const after = line.slice(sepIdx + 2);
+    const pipeIdx = after.indexOf('|');
+    const childName = (pipeIdx === -1 ? after : after.slice(0, pipeIdx)).trim();
+    const attrStr = pipeIdx === -1 ? '' : after.slice(pipeIdx);
+    if (!parentName || !childName) continue;
 
-      if (!node) {
-        node = makeNode(name);
-        nodeByPath.set(fullPath, node);
-        nodeCount += 1;
-        if (parentNode) {
-          parentNode.children.push(node);
-          pairCount += 1;
-        } else if (!root) {
-          root = node;
-        } else if (root.name !== name) {
-          // Multiple roots — attach under existing root to keep one tree.
-          root.children.push(node);
-          pairCount += 1;
-        }
-      }
+    const parent = getOrCreate(parentName);
+    const child = getOrCreate(childName);
 
-      if (isLast && attrStr) {
-        const { meta } = parseNodeLine(name + ' ' + attrStr);
-        node.meta = normalizeMeta(meta);
-        if (node.meta.occupation) occupations.add(node.meta.occupation);
-        if (node.meta.occupation2) occupations.add(node.meta.occupation2);
-      }
+    if (!childSet.has(childName)) {
+      parent.children.push(child);
+      childSet.add(childName);
+      pairCount += 1;
+    }
+    applyAttrs(child, attrStr);
+  }
 
-      parentNode = node;
-      parentPath = fullPath;
+  let root = null;
+  if (explicitRootName && nodeByName.has(explicitRootName)) {
+    root = nodeByName.get(explicitRootName);
+  } else {
+    for (const [name, node] of nodeByName) {
+      if (!childSet.has(name)) { root = node; break; }
     }
   }
 
