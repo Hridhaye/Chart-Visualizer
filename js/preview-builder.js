@@ -148,6 +148,8 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 /* ── Occupation sub-label (upcoming field — hidden until meta.occupation is set) ── */
 .occupation-slip{
   display:none;
+  position:relative;
+  z-index:1;
   min-width:${Math.round(nodeW * 0.92)}px;
   max-width:${Math.round(nodeW * 1.22)}px;
   padding:${Math.max(8, Math.round(sm * 9))}px ${Math.max(12, Math.round(sm * 14))}px;
