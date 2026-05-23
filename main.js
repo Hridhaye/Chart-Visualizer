@@ -54,6 +54,8 @@ let pendingPreviewRename = null;  // id to open rename in preview after next ren
 let occupations = [];
 let showOccupationSlips = false;
 let symbolTerms = [];        // user-managed library of symbol terms
+let hiddenSymbols = new Set(); // lowercased symbol terms hidden from cards
+let highlightSymbols = new Set(); // lowercased symbol terms that cause card highlight
 let pickerOpenId = null;     // id of node whose symbol picker is open in the preview
 
 // ── Context object (passed to mutations) ─────────────────────────────────────
@@ -83,11 +85,15 @@ const ctx = {
     occupations: [...occupations],
     showOccupationSlips,
     symbolTerms: [...symbolTerms],
+    hiddenSymbols: [...hiddenSymbols],
+    highlightSymbols: [...highlightSymbols],
   }),
   restoreExtraState: (extra) => {
     occupations = uniqueSortedOccupations(extra.occupations || []);
     showOccupationSlips = !!extra.showOccupationSlips;
     symbolTerms = uniqueSortedTerms(extra.symbolTerms || []);
+    hiddenSymbols = new Set((extra.hiddenSymbols || []).map(t => normalizeTerm(t).toLowerCase()).filter(Boolean));
+    highlightSymbols = new Set((extra.highlightSymbols || []).map(t => normalizeTerm(t).toLowerCase()).filter(Boolean));
     refreshOccSlipButton();
   },
 };
@@ -137,6 +143,12 @@ const symBody       = document.getElementById('symBody');
 const symInput      = document.getElementById('symInput');
 const btnSymAdd     = document.getElementById('btnSymAdd');
 const symList       = document.getElementById('symList');
+const symFilterToggle = document.getElementById('symFilterToggle');
+const symFilterArrow  = document.getElementById('symFilterArrow');
+const symFilterBody   = document.getElementById('symFilterBody');
+const symFilterList   = document.getElementById('symFilterList');
+const symFilterMaster = document.getElementById('symFilterMaster');
+const symFilterMasterLabel = document.getElementById('symFilterMasterLabel');
 
 installIOSFocusZoomGuard();
 
@@ -154,6 +166,7 @@ function renderAll() {
   });
   renderOccupationUi();
   renderSymbolUi();
+  renderSymbolFilterUi();
 }
 
 function installIOSFocusZoomGuard() {
@@ -246,6 +259,8 @@ function schedulePreviewUpdate() {
       showOccupationSlips,
       occupations,
       symbolTerms,
+      hiddenSymbols: [...hiddenSymbols],
+      highlightSymbols: [...highlightSymbols],
       pickerOpenId,
     });
   }, 300);
@@ -413,6 +428,8 @@ window.addEventListener('message', e => {
         pushUndoState(ctx);
         symbolTerms = symbolTerms.filter(t => t.toLowerCase() !== term.toLowerCase());
         symbolTerms = ensureLockedTerms(symbolTerms);
+        hiddenSymbols.delete(term.toLowerCase());
+        highlightSymbols.delete(term.toLowerCase());
         // Strip the term from any node that has it.
         traverse(root, n => {
           if (!Array.isArray(n.meta?.symbols)) return;
@@ -454,7 +471,7 @@ function setSyncStatus(message, ok) {
 }
 
 btnSave.addEventListener('click', async () => {
-  const extras = { occupations, showOccupationSlips, symbolTerms };
+  const extras = { occupations, showOccupationSlips, symbolTerms, hiddenSymbols: [...hiddenSymbols], highlightSymbols: [...highlightSymbols] };
   saveToLocal(root, liveUid, extras);
   if (syncCfg.gistId && syncCfg.token) {
     const result = await pushToGist(syncCfg, root, liveUid, extras);
@@ -467,14 +484,16 @@ btnSave.addEventListener('click', async () => {
 btnSyncPull.addEventListener('click', async () => {
   const result = await pullFromGist(syncCfg);
   if (!result.ok) { setSyncStatus(`Pull failed: ${result.error || result.status}`, false); return; }
-  const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false, symbolTerms: nextTerms = [] } = applySnapshot(result.data);
+  const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false, symbolTerms: nextTerms = [], hiddenSymbols: nextHidden = [], highlightSymbols: nextHighlight = [] } = applySnapshot(result.data);
   root = newRoot;
   occupations = uniqueSortedOccupations(nextOcc);
   showOccupationSlips = !!nextSlips;
   symbolTerms = ensureLockedTerms(nextTerms);
+  hiddenSymbols = new Set(nextHidden);
+  highlightSymbols = new Set(nextHighlight);
   const intro = migrateLegacySymbolsInTree(root);
   if (intro.length) symbolTerms = ensureLockedTerms([...symbolTerms, ...intro]);
-  saveToLocal(root, liveUid, { occupations, showOccupationSlips, symbolTerms });
+  saveToLocal(root, liveUid, { occupations, showOccupationSlips, symbolTerms, hiddenSymbols: [...hiddenSymbols], highlightSymbols: [...highlightSymbols] });
   renderAll();
   schedulePreviewUpdate();
   setSyncStatus('Pulled latest cloud save', true);
@@ -887,6 +906,8 @@ function removeSymbolTerm(term) {
   pushUndoState(ctx);
   symbolTerms = symbolTerms.filter(x => x.toLowerCase() !== t.toLowerCase());
   symbolTerms = ensureLockedTerms(symbolTerms);
+  hiddenSymbols.delete(t.toLowerCase());
+  highlightSymbols.delete(t.toLowerCase());
   traverse(root, n => {
     if (!Array.isArray(n.meta?.symbols)) return;
     const next = n.meta.symbols.filter(x => normalizeTerm(x).toLowerCase() !== t.toLowerCase());
@@ -896,6 +917,81 @@ function removeSymbolTerm(term) {
   });
   renderAll();
   schedulePreviewUpdate();
+}
+
+const SECOND_OCC_FILTER_KEY = '__second_occupation__';
+
+function renderSymbolFilterUi() {
+  if (!symFilterList) return;
+  symFilterList.innerHTML = '';
+
+  // Synthetic + library entries. The synthetic 'Second Occupation (R)' row is
+  // always present and controls the auto-triggered 2O/rebirth badge.
+  const entries = [
+    { key: SECOND_OCC_FILTER_KEY, label: 'Second Occupation (R)' },
+    ...symbolTerms.map(t => ({ key: t.toLowerCase(), label: t })),
+  ];
+
+  if (symFilterMaster) symFilterMaster.disabled = false;
+  const allVisible = entries.every(e => !hiddenSymbols.has(e.key));
+  if (symFilterMaster) symFilterMaster.checked = allVisible;
+  if (symFilterMasterLabel) symFilterMasterLabel.textContent = allVisible ? 'Hide all' : 'Show all';
+
+  for (const { key, label } of entries) {
+    const row = document.createElement('div');
+    row.className = 'sym-filter-row';
+
+    const showCb = document.createElement('input');
+    showCb.type = 'checkbox';
+    showCb.checked = !hiddenSymbols.has(key);
+    showCb.title = 'Show on cards';
+    showCb.addEventListener('change', () => {
+      if (showCb.checked) hiddenSymbols.delete(key);
+      else hiddenSymbols.add(key);
+      renderSymbolFilterUi();
+      schedulePreviewUpdate();
+    });
+
+    const hlCb = document.createElement('input');
+    hlCb.type = 'checkbox';
+    hlCb.className = 'sym-filter-highlight';
+    hlCb.checked = highlightSymbols.has(key);
+    hlCb.title = 'Highlight cards bearing this symbol';
+    hlCb.addEventListener('change', () => {
+      if (hlCb.checked) highlightSymbols.add(key);
+      else highlightSymbols.delete(key);
+      renderSymbolFilterUi();
+      schedulePreviewUpdate();
+    });
+
+    const name = document.createElement('span');
+    name.className = 'occ-item-name';
+    name.textContent = label;
+
+    row.appendChild(showCb);
+    row.appendChild(hlCb);
+    row.appendChild(name);
+    symFilterList.appendChild(row);
+  }
+}
+
+if (symFilterToggle) {
+  symFilterToggle.addEventListener('click', () => {
+    const open = symFilterBody.classList.toggle('open');
+    symFilterArrow.classList.toggle('open', open);
+  });
+}
+
+if (symFilterMaster) {
+  symFilterMaster.addEventListener('change', () => {
+    if (symFilterMaster.checked) {
+      hiddenSymbols.clear();
+    } else {
+      hiddenSymbols = new Set([SECOND_OCC_FILTER_KEY, ...symbolTerms.map(t => t.toLowerCase())]);
+    }
+    renderSymbolFilterUi();
+    schedulePreviewUpdate();
+  });
 }
 
 if (btnSymAdd) btnSymAdd.addEventListener('click', addSymbolTermFromUi);
@@ -1004,6 +1100,8 @@ document.addEventListener('keydown', e => {
     occupations = uniqueSortedOccupations(saved.occupations || []);
     showOccupationSlips = !!saved.showOccupationSlips;
     symbolTerms = ensureLockedTerms(saved.symbolTerms || []);
+    hiddenSymbols = new Set(saved.hiddenSymbols || []);
+    highlightSymbols = new Set(saved.highlightSymbols || []);
   } else {
     symbolTerms = ensureLockedTerms([]);
   }
@@ -1038,15 +1136,17 @@ document.addEventListener('keydown', e => {
   if (syncCfg.gistId) {
     pullFromGist(syncCfg).then(result => {
       if (!result.ok) return;
-      const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false, symbolTerms: nextTerms = [] } = applySnapshot(result.data);
+      const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false, symbolTerms: nextTerms = [], hiddenSymbols: nextHidden = [], highlightSymbols: nextHighlight = [] } = applySnapshot(result.data);
       root = newRoot;
       occupations = uniqueSortedOccupations(nextOcc);
       showOccupationSlips = !!nextSlips;
       symbolTerms = ensureLockedTerms(nextTerms);
+      hiddenSymbols = new Set(nextHidden);
+  highlightSymbols = new Set(nextHighlight);
       const intro = migrateLegacySymbolsInTree(root);
       if (intro.length) symbolTerms = ensureLockedTerms([...symbolTerms, ...intro]);
       refreshOccSlipButton();
-      saveToLocal(root, liveUid, { occupations, showOccupationSlips, symbolTerms });
+      saveToLocal(root, liveUid, { occupations, showOccupationSlips, symbolTerms, hiddenSymbols: [...hiddenSymbols], highlightSymbols: [...highlightSymbols] });
       renderAll();
       schedulePreviewUpdate();
     });

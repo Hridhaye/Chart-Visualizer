@@ -48,6 +48,8 @@ export function buildChartSrcdoc(rootNode, cameraState, selectedId, spacingMult 
     knownSigns: knownSigns(rootNode),
     rootId: rootNode?.id ?? null,
     symbolTerms: Array.isArray(options.symbolTerms) ? options.symbolTerms : [],
+    hiddenSymbols: Array.isArray(options.hiddenSymbols) ? options.hiddenSymbols : [],
+    highlightSymbols: Array.isArray(options.highlightSymbols) ? options.highlightSymbols : [],
     secondOccChildTerm: SECOND_OCC_CHILD_TERM,
     pickerOpenId: typeof options.pickerOpenId === 'number' ? options.pickerOpenId : null,
   });
@@ -120,6 +122,28 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   box-shadow:0 0 0 2px rgba(255,255,255,.38),0 12px 26px rgba(0,0,0,.3)}
 .node.drop-target{outline:3px solid rgba(34,197,94,.95);outline-offset:5px;
   box-shadow:0 0 0 2px rgba(255,255,255,.42),0 12px 26px rgba(0,0,0,.28)}
+.node.node-highlight{
+  transform:scale(1.12);
+  transform-origin:center center;
+  border-color:rgba(255,210,90,.95);
+  contain:none;
+  position:relative;
+  z-index:1}
+.node-wrap.has-highlight{
+  z-index:50;
+  overflow:visible}
+.node-wrap.has-highlight::before{
+  content:"";
+  position:absolute;
+  left:50%;top:${Math.round(nodeH * 0.5)}px;
+  width:${Math.round(nodeW * 1.22)}px;
+  height:${Math.round(nodeH * 1.55)}px;
+  transform:translate(-50%,-50%);
+  background:rgba(255,196,70,.95);
+  border:2px solid rgba(255,210,90,1);
+  border-radius:6px;
+  z-index:0;
+  pointer-events:none}
 
 /* ── Occupation sub-label (upcoming field — hidden until meta.occupation is set) ── */
 .occupation-slip{
@@ -153,7 +177,6 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 }
 .rebirth-badge.visible{display:block}
 
-.node.double-occupation{box-shadow:0 0 0 2px rgba(212,168,76,.3),0 1px 2px rgba(0,0,0,.08)}
 .double-occupation-badge,
 .sym-badge{
   display:none;
@@ -383,6 +406,16 @@ const ROOT_ID=(typeof PREVIEW_OPTIONS==='object' && typeof PREVIEW_OPTIONS.rootI
 const SYMBOL_TERMS=(typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OPTIONS.symbolTerms))
   ? PREVIEW_OPTIONS.symbolTerms.filter(v=>typeof v==='string')
   : [];
+const HIDDEN_SYMBOLS=new Set(
+  (typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OPTIONS.hiddenSymbols))
+    ? PREVIEW_OPTIONS.hiddenSymbols.filter(v=>typeof v==='string').map(v=>v.toLowerCase())
+    : []
+);
+const HIGHLIGHT_SYMBOLS=new Set(
+  (typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OPTIONS.highlightSymbols))
+    ? PREVIEW_OPTIONS.highlightSymbols.filter(v=>typeof v==='string').map(v=>v.toLowerCase())
+    : []
+);
 const SECOND_OCC_CHILD_TERM=(typeof PREVIEW_OPTIONS==='object' && typeof PREVIEW_OPTIONS.secondOccChildTerm==='string')
   ? PREVIEW_OPTIONS.secondOccChildTerm
   : 'Second Occupation Child';
@@ -741,8 +774,15 @@ function closeSymbolPicker(){
 function buildCardContent(nodeEl, node){
   const bgColor = NODE_COLOR_MAP[sc2(node.name)] || '#ffffff';
   const fg=textColorFor(bgColor);
-  const hasDouble = !!(node.meta?.occupation2);
-  const syms = nodeSymbols(node);
+  const hasDouble = !!(node.meta?.occupation2) && !HIDDEN_SYMBOLS.has('__second_occupation__');
+  const syms = nodeSymbols(node).filter(t => !HIDDEN_SYMBOLS.has(t.toLowerCase()));
+
+  // Highlight if any visible symbol on this card is in the highlight set.
+  // Two highlighted symbols still produce a single highlight (class is binary).
+  const highlighted =
+    (hasDouble && HIGHLIGHT_SYMBOLS.has('__second_occupation__')) ||
+    syms.some(t => HIGHLIGHT_SYMBOLS.has(t.toLowerCase()));
+  if (highlighted) nodeEl.classList.add('node-highlight');
 
   // Total symbol count includes the hardcoded 2O badge if present.
   const totalSymbols = (hasDouble ? 1 : 0) + syms.length;
@@ -1131,6 +1171,7 @@ function renderNodes(){
         if(wasPickerOpen) post({type:'picker-state',id:null});
       });
       buildCardContent(d, node);
+      if(d.classList.contains('node-highlight')) wrap.classList.add('has-highlight');
       wrap.appendChild(d);
       const occ=(node.meta?.occupation||'').trim();
       if(SHOW_OCCUPATION_SLIPS && occ){

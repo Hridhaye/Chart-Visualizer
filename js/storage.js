@@ -49,7 +49,13 @@ export function applySnapshot(data) {
   const symbolTerms = Array.isArray(data.symbolTerms)
     ? data.symbolTerms.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean)
     : [];
-  return { root, uid, occupations, showOccupationSlips, symbolTerms };
+  const hiddenSymbols = Array.isArray(data.hiddenSymbols)
+    ? data.hiddenSymbols.filter(v => typeof v === 'string').map(v => v.trim().toLowerCase()).filter(Boolean)
+    : [];
+  const highlightSymbols = Array.isArray(data.highlightSymbols)
+    ? data.highlightSymbols.filter(v => typeof v === 'string').map(v => v.trim().toLowerCase()).filter(Boolean)
+    : [];
+  return { root, uid, occupations, showOccupationSlips, symbolTerms, hiddenSymbols, highlightSymbols };
 }
 
 // ── Local save / load ─────────────────────────────────────────────────────────

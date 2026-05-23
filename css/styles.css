@@ -346,8 +346,6 @@ html, body {
     display: flex;
     flex-wrap: wrap;
     gap: 4px 11px;
-    max-height: 80px;
-    overflow-y: auto;
 }
 .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text); }
 .legend-dot  { width: 7px; height: 7px; border-radius: 50%; }
@@ -358,11 +356,13 @@ html, body {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    max-height: 1200px;
+    overflow-y: auto;
+    max-height: 60vh;
     transform-origin: top;
     transition: max-height 0.22s ease, transform 0.22s ease;
 }
+.bottom-tools::-webkit-scrollbar { width: 3px; }
+.bottom-tools::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 .bottom-tools.collapsed {
     max-height: 0;
     transform: translateY(-8px);
@@ -550,6 +550,48 @@ html, body {
     color: var(--dim);
     padding: 8px;
 }
+
+.sym-filter-row {
+    display: grid;
+    grid-template-columns: 32px 56px 1fr;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--text);
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.sym-filter-row:last-child { border-bottom: none; }
+.sym-filter-row input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+    justify-self: center;
+}
+.sym-filter-row input.sym-filter-highlight {
+    accent-color: #f5c451;
+}
+.sym-filter-master {
+    grid-template-columns: 32px 1fr;
+    margin-bottom: 4px;
+    border: 1px solid var(--border2);
+    background: rgba(0,0,0,0.24);
+    font-family: var(--head);
+    letter-spacing: 0.04em;
+    color: var(--muted);
+}
+.sym-filter-legend {
+    display: grid;
+    grid-template-columns: 32px 56px 1fr;
+    gap: 4px;
+    padding: 2px 8px 4px 8px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+}
+.sym-filter-legend-cell { text-align: center; }
+.sym-filter-legend-name { text-align: left; padding-left: 4px; }
 
 .import-status     { flex: 1; font-size: 10px; color: var(--muted); letter-spacing: 0.04em; }
 .import-status.ok  { color: var(--accent); }
