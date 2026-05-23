@@ -319,18 +319,20 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 
 /* ── Touch overrides ── */
 @media (pointer:coarse){
-  .node-actions{gap:${Math.round(8*sm)}px;padding:${Math.round(8*sm)}px ${Math.round(10*sm)}px}
-  .node-btn{width:${Math.round(44*sm)}px;height:${Math.round(44*sm)}px;
-    font-size:${Math.max(18,Math.round(18*sm))}px}
-  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
+  .node-actions{gap:${Math.round(6*sm)}px;padding:${Math.round(6*sm)}px ${Math.round(8*sm)}px}
+  .node-btn{width:${Math.round(36*sm)}px;height:${Math.round(36*sm)}px;
+    font-size:${Math.max(15,Math.round(15*sm))}px}
+  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(44, Math.round(42 * sm))}px;padding:10px 12px}
   .node-sym-picker .sym-add-input,.node-sym-picker .sym-add-btn,.node-sym-picker .sym-done-btn,.node-sym-picker .sym-chip{font-size:16px}
+  .node-rename-split, .node-sym-picker{max-width: 88vw;}
 }
 @media screen and (max-width:1024px){
-  .node-actions{gap:${Math.round(9*sm)}px;padding:${Math.round(9*sm)}px ${Math.round(11*sm)}px}
-  .node-btn{width:${Math.round(46*sm)}px;height:${Math.round(46*sm)}px;
-    font-size:${Math.max(19,Math.round(19*sm))}px}
-  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
+  .node-actions{gap:${Math.round(7*sm)}px;padding:${Math.round(7*sm)}px ${Math.round(9*sm)}px}
+  .node-btn{width:${Math.round(38*sm)}px;height:${Math.round(38*sm)}px;
+    font-size:${Math.max(16,Math.round(16*sm))}px}
+  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(48, Math.round(46 * sm))}px;padding:10px 12px}
   .node-sym-picker .sym-add-input,.node-sym-picker .sym-add-btn,.node-sym-picker .sym-done-btn,.node-sym-picker .sym-chip{font-size:16px}
+  .node-rename-split, .node-sym-picker{max-width: 88vw;}
 }
 ${colorCSS}`;
 }
