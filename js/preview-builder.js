@@ -334,6 +334,13 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   .node-sym-picker .sym-add-input,.node-sym-picker .sym-add-btn,.node-sym-picker .sym-done-btn,.node-sym-picker .sym-chip{font-size:16px}
   .node-rename-split, .node-sym-picker{max-width: 88vw;}
 }
+@media screen and (max-width:767px){
+  .node-actions{gap:${Math.round(4*sm)}px;padding:${Math.round(4*sm)}px ${Math.round(6*sm)}px}
+  .node-btn{width:${Math.round(30*sm)}px;height:${Math.round(30*sm)}px;
+    font-size:${Math.max(14,Math.round(14*sm))}px}
+  .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{min-height:${Math.max(40, Math.round(38 * sm))}px;padding:8px 10px}
+  .node-rename-split, .node-sym-picker{max-width: 95vw;}
+}
 ${colorCSS}`;
 }
 
