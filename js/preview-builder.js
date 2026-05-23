@@ -804,6 +804,70 @@ function applyActionButtonScale(scale = actionBtnScale) {
       el.style.transform = 'scale('+scale+')';
     }
   }catch(e){}
+  clampActionPanelToViewport();
+}
+
+// Keep the selected node's action panel AND any open editor popovers
+// (rename split, occupation select, symbol picker, inline editor) fully
+// on-screen. They sit inside #world, which is scaled by cam.z — any CSS
+// translate we add gets multiplied by cam.z in viewport space, so we divide
+// the viewport-pixel shift by cam.z when composing the transform.
+// The action bar anchors at 'top center' (sits below the node) and flips
+// upward when clipped; the editors anchor at 'bottom center' (sit above the
+// node) and flip downward when clipped.
+function clampActionPanelToViewport(){
+  try{
+    const wrap = nl.querySelector('.node-wrap.selected');
+    if(!wrap) return;
+    const acts = wrap.querySelector('.node-actions');
+    const editor = wrap.querySelector('.node-inline-editor, .node-rename-split, .node-sym-picker, .node-occ-select');
+    const base = 'scale('+actionBtnScale+')';
+    if(acts){   acts.style.transformOrigin = 'top center';    acts.style.transform = base; }
+    if(editor){ editor.style.transformOrigin = 'bottom center'; editor.style.transform = base; }
+    if(!acts) return;
+    requestAnimationFrame(()=>{
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const margin = 8;
+      const z = Math.max(cam.z || 1, 0.0001);
+
+      // Horizontal clamp for the action bar.
+      const aRect = acts.getBoundingClientRect();
+      let aDxView = 0, aDyView = 0;
+      if(aRect.left < margin) aDxView = margin - aRect.left;
+      else if(aRect.right > vw - margin) aDxView = (vw - margin) - aRect.right;
+
+      // Vertical: if there's an editor open and it overlaps (or sits above)
+      // the action bar, push the bar down so its top clears the editor's bottom.
+      if(editor){
+        const eRect = editor.getBoundingClientRect();
+        const gap = 8;
+        if(eRect.bottom + gap > aRect.top){
+          aDyView = (eRect.bottom + gap) - aRect.top;
+        }
+      }
+
+      // Then clamp the (possibly shifted) bar to the viewport bottom.
+      const projectedBottom = aRect.bottom + aDyView;
+      if(projectedBottom > vh - margin){
+        aDyView += (vh - margin) - projectedBottom;
+      }
+
+      if(aDxView !== 0 || aDyView !== 0){
+        acts.style.transform = 'translate('+(aDxView/z)+'px,'+(aDyView/z)+'px) '+base;
+      }
+
+      // Horizontal clamp for the editor (it stays in its natural vertical slot).
+      if(editor){
+        const eRect = editor.getBoundingClientRect();
+        let eDxView = 0;
+        if(eRect.left < margin) eDxView = margin - eRect.left;
+        else if(eRect.right > vw - margin) eDxView = (vw - margin) - eRect.right;
+        if(eDxView !== 0){
+          editor.style.transform = 'translate('+(eDxView/z)+'px,0) '+base;
+        }
+      }
+    });
+  }catch(e){}
 }
 
 function updateSelection(){
@@ -1215,6 +1279,8 @@ window.addEventListener('message',e=>{
     beginRename(e.data.id);
   }
 });
+
+window.addEventListener('resize',()=>{ try{ applyActionButtonScale(); }catch(e){} });
 
 /* ════════════════════════════════════════════════
    CAMERA — pan / pinch / wheel
