@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR==340,NR==1620' js/preview-builder.js)",
+      "Bash(grep -n '`')",
+      "Bash(node --check --input-type=module)"
+    ]
+  }
+}
