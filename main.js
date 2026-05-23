@@ -17,6 +17,7 @@ import {
   makeNode, find, findParent, flatVisible, signOf,
   fromPairs, serializeNode, deserializeNode,
   SEED_PAIRS, uid as liveUid,
+  SECOND_OCC_CHILD_TERM, normalizeTerm, migrateLegacySymbolsInTree, getNodeSymbols,
 } from './js/data.js';
 
 import {
@@ -52,6 +53,8 @@ let syncCfg        = loadSyncConfig();
 let pendingPreviewRename = null;  // id to open rename in preview after next render
 let occupations = [];
 let showOccupationSlips = false;
+let symbolTerms = [];        // user-managed library of symbol terms
+let pickerOpenId = null;     // id of node whose symbol picker is open in the preview
 
 // ── Context object (passed to mutations) ─────────────────────────────────────
 // Mutations use this to access/update state without circular imports.
@@ -79,10 +82,12 @@ const ctx = {
   captureExtraState: () => ({
     occupations: [...occupations],
     showOccupationSlips,
+    symbolTerms: [...symbolTerms],
   }),
   restoreExtraState: (extra) => {
     occupations = uniqueSortedOccupations(extra.occupations || []);
     showOccupationSlips = !!extra.showOccupationSlips;
+    symbolTerms = uniqueSortedTerms(extra.symbolTerms || []);
     refreshOccSlipButton();
   },
 };
@@ -126,6 +131,12 @@ const btnOccAdd     = document.getElementById('btnOccAdd');
 const occSelect     = document.getElementById('occSelect');
 const btnOccClear   = document.getElementById('btnOccClear');
 const occList       = document.getElementById('occList');
+const symToggle     = document.getElementById('symToggle');
+const symArrow      = document.getElementById('symArrow');
+const symBody       = document.getElementById('symBody');
+const symInput      = document.getElementById('symInput');
+const btnSymAdd     = document.getElementById('btnSymAdd');
+const symList       = document.getElementById('symList');
 
 installIOSFocusZoomGuard();
 
@@ -142,6 +153,7 @@ function renderAll() {
     onMoveDown:   (id) => moveSibling(id, +1, ctx),
   });
   renderOccupationUi();
+  renderSymbolUi();
 }
 
 function installIOSFocusZoomGuard() {
@@ -233,6 +245,8 @@ function schedulePreviewUpdate() {
     previewEl.srcdoc = buildChartSrcdoc(root, cameraState, sel, spacing, {
       showOccupationSlips,
       occupations,
+      symbolTerms,
+      pickerOpenId,
     });
   }, 300);
 }
@@ -265,6 +279,15 @@ window.addEventListener('message', e => {
     const id = e.data.id;
     if (id === null)                          selectNode(null);
     else if (typeof id === 'number' && find(id, root)) selectNode(id, { scrollTree: true });
+    return;
+  }
+
+  if (e.data.type === 'picker-state') {
+    // The preview tells us when the symbol picker opens or closes so that
+    // schedulePreviewUpdate() rebuilds with the picker still open on the
+    // right node.
+    const id = e.data.id;
+    pickerOpenId = (typeof id === 'number' && find(id, root)) ? id : null;
     return;
   }
 
@@ -323,35 +346,81 @@ window.addEventListener('message', e => {
         schedulePreviewUpdate();
         break;
       }
-      case 'toggle-emblem': {
+      case 'set-symbols': {
         const node = find(id, root);
         if (!node) break;
+        const incoming = Array.isArray(e.data.symbols) ? e.data.symbols : [];
+        // Drop SECOND_OCC_CHILD_TERM if parent has no second occupation.
+        const parent = findParent(id, root);
+        const parentHas2O = !!(parent?.meta?.occupation2);
+        const filtered = uniqueSortedTerms(incoming).filter(t =>
+          (t.toLowerCase() !== SECOND_OCC_CHILD_TERM.toLowerCase()) || parentHas2O
+        );
+        // Compare as sets (case-insensitive) to skip undo when nothing changed.
+        const prev = getNodeSymbols(node);
+        const prevKey = prev.map(t => t.toLowerCase()).sort().join('|');
+        const nextKey = filtered.map(t => t.toLowerCase()).sort().join('|');
+        if (prevKey === nextKey) break;
         pushUndoState(ctx);
-        node.meta = { ...node.meta, emblem: !node.meta?.emblem };
+        // Preserve user-typed casing/order from `incoming` where present.
+        const filteredKept = [];
+        const want = new Set(filtered.map(t => t.toLowerCase()));
+        for (const t of incoming) {
+          const norm = normalizeTerm(t);
+          if (!norm) continue;
+          const k = norm.toLowerCase();
+          if (want.has(k) && !filteredKept.some(x => x.toLowerCase() === k)) {
+            filteredKept.push(norm);
+          }
+        }
+        node.meta = { ...node.meta, symbols: filteredKept };
         renderAll();
         schedulePreviewUpdate();
         break;
       }
-      case 'set-rank': {
+      case 'add-symbol-term': {
+        const term = normalizeTerm(e.data.term);
+        if (!term) break;
+        const exists = symbolTerms.some(t => t.toLowerCase() === term.toLowerCase());
         const node = find(id, root);
-        if (!node) break;
-        const raw = String(e.data.value || '').trim().toLowerCase();
-        const next = (raw === 'ascended' || raw === 'sentinel') ? raw : '';
-        const prev = String(node.meta?.rank || '').trim();
-        if (next === prev) break;
-        pushUndoState(ctx);
-        const meta = { ...node.meta };
-        if (next) meta.rank = next; else delete meta.rank;
-        node.meta = meta;
+        if (!exists) {
+          pushUndoState(ctx);
+          symbolTerms = ensureLockedTerms([...symbolTerms, term]);
+        }
+        if (e.data.assignToNode && node) {
+          const cur = getNodeSymbols(node);
+          if (!cur.some(t => t.toLowerCase() === term.toLowerCase())) {
+            if (exists) pushUndoState(ctx);  // only push if we haven't already
+            node.meta = { ...node.meta, symbols: [...cur, term] };
+          }
+        }
         renderAll();
         schedulePreviewUpdate();
         break;
       }
-      case 'toggle-notable': {
-        const node = find(id, root);
-        if (!node) break;
+      case 'remove-symbol-term': {
+        const term = normalizeTerm(e.data.term);
+        if (!term) break;
+        // Can't remove the locked term.
+        if (term.toLowerCase() === SECOND_OCC_CHILD_TERM.toLowerCase()) break;
+        const exists = symbolTerms.some(t => t.toLowerCase() === term.toLowerCase());
+        const hasOnNodes = (function check(n){
+          if ((n.meta?.symbols || []).some(t => normalizeTerm(t).toLowerCase() === term.toLowerCase())) return true;
+          for (const c of n.children) if (check(c)) return true;
+          return false;
+        })(root);
+        if (!exists && !hasOnNodes) break;
         pushUndoState(ctx);
-        node.meta = { ...node.meta, notable: !node.meta?.notable };
+        symbolTerms = symbolTerms.filter(t => t.toLowerCase() !== term.toLowerCase());
+        symbolTerms = ensureLockedTerms(symbolTerms);
+        // Strip the term from any node that has it.
+        traverse(root, n => {
+          if (!Array.isArray(n.meta?.symbols)) return;
+          const next = n.meta.symbols.filter(t => normalizeTerm(t).toLowerCase() !== term.toLowerCase());
+          if (next.length !== n.meta.symbols.length) {
+            n.meta = { ...n.meta, symbols: next };
+          }
+        });
         renderAll();
         schedulePreviewUpdate();
         break;
@@ -385,7 +454,7 @@ function setSyncStatus(message, ok) {
 }
 
 btnSave.addEventListener('click', async () => {
-  const extras = { occupations, showOccupationSlips };
+  const extras = { occupations, showOccupationSlips, symbolTerms };
   saveToLocal(root, liveUid, extras);
   if (syncCfg.gistId && syncCfg.token) {
     const result = await pushToGist(syncCfg, root, liveUid, extras);
@@ -398,11 +467,14 @@ btnSave.addEventListener('click', async () => {
 btnSyncPull.addEventListener('click', async () => {
   const result = await pullFromGist(syncCfg);
   if (!result.ok) { setSyncStatus(`Pull failed: ${result.error || result.status}`, false); return; }
-  const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false } = applySnapshot(result.data);
+  const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false, symbolTerms: nextTerms = [] } = applySnapshot(result.data);
   root = newRoot;
   occupations = uniqueSortedOccupations(nextOcc);
   showOccupationSlips = !!nextSlips;
-  saveToLocal(root, liveUid, { occupations, showOccupationSlips });
+  symbolTerms = ensureLockedTerms(nextTerms);
+  const intro = migrateLegacySymbolsInTree(root);
+  if (intro.length) symbolTerms = ensureLockedTerms([...symbolTerms, ...intro]);
+  saveToLocal(root, liveUid, { occupations, showOccupationSlips, symbolTerms });
   renderAll();
   schedulePreviewUpdate();
   setSyncStatus('Pulled latest cloud save', true);
@@ -504,6 +576,11 @@ btnImport.addEventListener('click', () => {
   pushUndoState(ctx);
   root = result.root;
   occupations = uniqueSortedOccupations(result.occupations || []);
+  // Merge any symbol terms discovered in the import with the existing library.
+  symbolTerms = ensureLockedTerms([...symbolTerms, ...(result.symbolTerms || [])]);
+  // Migrate any legacy fields that came through normalizeMeta (defensive).
+  const intro = migrateLegacySymbolsInTree(root);
+  if (intro.length) symbolTerms = ensureLockedTerms([...symbolTerms, ...intro]);
   sel  = null;
   importInput.value      = '';
   importStatus.textContent = '—';
@@ -572,6 +649,27 @@ function uniqueSortedOccupations(values) {
     if (v) seen.add(v);
   }
   return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+function uniqueSortedTerms(values) {
+  const seen = new Map();  // lowercased -> normalized display form
+  for (const raw of values || []) {
+    const t = normalizeTerm(raw);
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (!seen.has(k)) seen.set(k, t);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** Make sure SECOND_OCC_CHILD_TERM is always present in the library. */
+function ensureLockedTerms(list) {
+  const out = uniqueSortedTerms(list || []);
+  if (!out.some(t => t.toLowerCase() === SECOND_OCC_CHILD_TERM.toLowerCase())) {
+    out.push(SECOND_OCC_CHILD_TERM);
+    out.sort((a, b) => a.localeCompare(b));
+  }
+  return out;
 }
 
 function traverse(node, fn) {
@@ -728,6 +826,83 @@ occToggle.addEventListener('click', () => {
   occArrow.classList.toggle('open', open);
 });
 
+if (symToggle) {
+  symToggle.addEventListener('click', () => {
+    const open = symBody.classList.toggle('open');
+    symArrow.classList.toggle('open', open);
+  });
+}
+
+function renderSymbolUi() {
+  if (!symList) return;
+  symList.innerHTML = '';
+  if (!symbolTerms.length) {
+    const empty = document.createElement('div');
+    empty.className = 'occ-empty';
+    empty.textContent = 'No symbols defined.';
+    symList.appendChild(empty);
+    return;
+  }
+  for (const term of symbolTerms) {
+    const row = document.createElement('div');
+    row.className = 'occ-item';
+    const name = document.createElement('span');
+    name.className = 'occ-item-name';
+    name.textContent = term;
+    row.appendChild(name);
+    const isLocked = term.toLowerCase() === SECOND_OCC_CHILD_TERM.toLowerCase();
+    const del = document.createElement('button');
+    del.className = 'btn-import';
+    del.textContent = isLocked ? 'Locked' : 'Delete';
+    del.disabled = isLocked;
+    del.title = isLocked
+      ? 'Reserved term — cannot be removed'
+      : 'Remove from library (also strips it from any node that uses it)';
+    if (!isLocked) {
+      del.addEventListener('click', () => removeSymbolTerm(term));
+    }
+    row.appendChild(del);
+    symList.appendChild(row);
+  }
+}
+
+function addSymbolTermFromUi() {
+  const t = normalizeTerm(symInput.value);
+  if (!t) return;
+  if (symbolTerms.some(x => x.toLowerCase() === t.toLowerCase())) {
+    symInput.value = '';
+    return;
+  }
+  pushUndoState(ctx);
+  symbolTerms = ensureLockedTerms([...symbolTerms, t]);
+  symInput.value = '';
+  renderAll();
+  schedulePreviewUpdate();
+}
+
+function removeSymbolTerm(term) {
+  const t = normalizeTerm(term);
+  if (!t) return;
+  if (t.toLowerCase() === SECOND_OCC_CHILD_TERM.toLowerCase()) return;
+  pushUndoState(ctx);
+  symbolTerms = symbolTerms.filter(x => x.toLowerCase() !== t.toLowerCase());
+  symbolTerms = ensureLockedTerms(symbolTerms);
+  traverse(root, n => {
+    if (!Array.isArray(n.meta?.symbols)) return;
+    const next = n.meta.symbols.filter(x => normalizeTerm(x).toLowerCase() !== t.toLowerCase());
+    if (next.length !== n.meta.symbols.length) {
+      n.meta = { ...n.meta, symbols: next };
+    }
+  });
+  renderAll();
+  schedulePreviewUpdate();
+}
+
+if (btnSymAdd) btnSymAdd.addEventListener('click', addSymbolTermFromUi);
+if (symInput) symInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addSymbolTermFromUi(); }
+});
+
 btnOccAdd.addEventListener('click', addOccupation);
 occInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
@@ -828,6 +1003,16 @@ document.addEventListener('keydown', e => {
     root = saved.root;
     occupations = uniqueSortedOccupations(saved.occupations || []);
     showOccupationSlips = !!saved.showOccupationSlips;
+    symbolTerms = ensureLockedTerms(saved.symbolTerms || []);
+  } else {
+    symbolTerms = ensureLockedTerms([]);
+  }
+
+  // Migrate legacy meta.notable/emblem/rank into meta.symbols (idempotent).
+  // Seed any introduced terms into the library so they appear in the picker.
+  const introduced = migrateLegacySymbolsInTree(root);
+  if (introduced.length) {
+    symbolTerms = ensureLockedTerms([...symbolTerms, ...introduced]);
   }
 
   // Load spacing preference
@@ -853,12 +1038,15 @@ document.addEventListener('keydown', e => {
   if (syncCfg.gistId) {
     pullFromGist(syncCfg).then(result => {
       if (!result.ok) return;
-      const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false } = applySnapshot(result.data);
+      const { root: newRoot, occupations: nextOcc = [], showOccupationSlips: nextSlips = false, symbolTerms: nextTerms = [] } = applySnapshot(result.data);
       root = newRoot;
       occupations = uniqueSortedOccupations(nextOcc);
       showOccupationSlips = !!nextSlips;
+      symbolTerms = ensureLockedTerms(nextTerms);
+      const intro = migrateLegacySymbolsInTree(root);
+      if (intro.length) symbolTerms = ensureLockedTerms([...symbolTerms, ...intro]);
       refreshOccSlipButton();
-      saveToLocal(root, liveUid, { occupations, showOccupationSlips });
+      saveToLocal(root, liveUid, { occupations, showOccupationSlips, symbolTerms });
       renderAll();
       schedulePreviewUpdate();
     });

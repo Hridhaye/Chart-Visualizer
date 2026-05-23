@@ -17,7 +17,7 @@
  *   { type: 'start-rename', id }
  */
 
-import { serializeNode, allColorMap, knownSigns } from './data.js';
+import { serializeNode, allColorMap, knownSigns, SECOND_OCC_CHILD_TERM } from './data.js';
 
 // ── Card layout constants ─────────────────────────────────────────────────────
 // These are exposed so tests or callers can override without touching the template.
@@ -47,6 +47,9 @@ export function buildChartSrcdoc(rootNode, cameraState, selectedId, spacingMult 
     occupations: Array.isArray(options.occupations) ? options.occupations : [],
     knownSigns: knownSigns(rootNode),
     rootId: rootNode?.id ?? null,
+    symbolTerms: Array.isArray(options.symbolTerms) ? options.symbolTerms : [],
+    secondOccChildTerm: SECOND_OCC_CHILD_TERM,
+    pickerOpenId: typeof options.pickerOpenId === 'number' ? options.pickerOpenId : null,
   });
   const smClamped = Math.min(1.7, Math.max(1.0, spacingMult));
 
@@ -152,9 +155,7 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 
 .node.double-occupation{box-shadow:0 0 0 2px rgba(212,168,76,.3),0 1px 2px rgba(0,0,0,.08)}
 .double-occupation-badge,
-.special-emblem,
-.notable-badge,
-.rank-badge{
+.sym-badge{
   display:none;
   position:absolute;
   width:var(--symbol-size,24px);
@@ -162,36 +163,19 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   align-items:center;
   justify-content:center;
   pointer-events:none;
-  font-size:calc(var(--symbol-size,24px) * 0.65);
+  font-size:calc(var(--symbol-size,24px) * 0.55);
   font-weight:700;
   line-height:1;
   color:currentColor;
+  border-radius:50%;
+  background:rgba(0,0,0,0.12);
+  white-space:nowrap;
 }
 .double-occupation-badge{
   top:8px;right:8px;
-  border-radius:50%;
-  background:rgba(0,0,0,0.1);
-}
-.special-emblem{
-  top:8px;left:8px;
-  /* transform: rotate(45deg); */ /* Removed to make it straight */
-  background:rgba(0,0,0,0.1);
-}
-.notable-badge{
-  background:rgba(0,0,0,0.1);
-  right:8px;
-  bottom:8px;
-}
-.rank-badge{
-  background:rgba(0,0,0,0.1);
-  left:8px;
-  bottom:8px;
-  border-radius:50%;
 }
 .double-occupation-badge.visible,
-.special-emblem.visible,
-.notable-badge.visible,
-.rank-badge.visible{display:flex}
+.sym-badge.visible{display:flex}
 
 /* ── Action bar ── */
 .node-actions{display:none;align-items:center;gap:${actGap}px;
@@ -252,6 +236,82 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
 .node-rename-split .rs-sign-text{flex:1 1 50%;min-width:0;}
 .node-rename-split .rs-rest{flex:1 1 50%;min-width:0;border-color:rgba(212,168,76,.92);}
 .node-rename-split .rs-sign option{background:#1e1b18;color:#f0e5cf;}
+
+/* Symbol picker editor (opens when the symbol action button is clicked). */
+.node-sym-picker{
+  width:${Math.round(nodeW * 1.65)}px;
+  display:flex;
+  flex-direction:column;
+  gap:${Math.max(6, Math.round(6 * sm))}px;
+  padding:${Math.max(10, Math.round(10 * sm))}px;
+  border-radius:10px;
+  background:rgba(24,22,20,.98);
+  color:#f0e5cf;
+  border:2px solid rgba(212,168,76,.72);
+  box-shadow:0 12px 26px rgba(0,0,0,.34);
+  position:relative;
+  z-index:2550;
+  transform-origin:bottom center;
+}
+.node-sym-picker .sym-chips{
+  display:flex;flex-wrap:wrap;gap:${Math.max(4, Math.round(5 * sm))}px;
+  max-height:${Math.round(180 * sm)}px;overflow-y:auto;
+  justify-content:center;
+}
+.node-sym-picker .sym-chip{
+  border:1px solid rgba(212,168,76,.5);
+  background:rgba(255,255,255,.05);
+  color:#f0e5cf;
+  border-radius:999px;
+  padding:${Math.max(6, Math.round(6 * sm))}px ${Math.max(10, Math.round(10 * sm))}px;
+  font:700 ${Math.max(13, Math.round(13 * sm))}px/1 Arial,sans-serif;
+  cursor:pointer;
+}
+.node-sym-picker .sym-chip.on{
+  background:rgba(212,168,76,.85);
+  color:#1b1110;
+  border-color:rgba(212,168,76,.95);
+}
+.node-sym-picker .sym-chip.disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+}
+.node-sym-picker .sym-empty{
+  text-align:center;
+  font:700 ${Math.max(12, Math.round(12 * sm))}px/1.2 Arial,sans-serif;
+  opacity:0.7;
+  padding:4px 0;
+}
+.node-sym-picker .sym-add-row{
+  display:flex;gap:6px;align-items:center;
+}
+.node-sym-picker .sym-add-input{
+  flex:1 1 auto;
+  min-width:0;
+  background:rgba(0,0,0,.35);
+  color:#f0e5cf;
+  border:1px solid rgba(212,168,76,.55);
+  border-radius:6px;
+  padding:${Math.max(6, Math.round(6 * sm))}px ${Math.max(8, Math.round(8 * sm))}px;
+  font:700 ${Math.max(13, Math.round(13 * sm))}px/1.15 Arial,sans-serif;
+  outline:none;
+}
+.node-sym-picker .sym-add-btn,
+.node-sym-picker .sym-done-btn{
+  background:rgba(212,168,76,.85);
+  color:#1b1110;
+  border:none;
+  border-radius:6px;
+  padding:${Math.max(6, Math.round(6 * sm))}px ${Math.max(10, Math.round(10 * sm))}px;
+  font:700 ${Math.max(13, Math.round(13 * sm))}px/1 Arial,sans-serif;
+  cursor:pointer;
+}
+.node-sym-picker .sym-chip-x{
+  margin-left:6px;
+  opacity:0.7;
+  font-weight:900;
+}
+.node-sym-picker .sym-chip-x:hover{opacity:1;}
 .node-occ-select option{
   background:#1e1b18;
   color:#f0e5cf;
@@ -263,12 +323,14 @@ svg{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:1}
   .node-btn{width:${Math.round(44*sm)}px;height:${Math.round(44*sm)}px;
     font-size:${Math.max(18,Math.round(18*sm))}px}
   .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
+  .node-sym-picker .sym-add-input,.node-sym-picker .sym-add-btn,.node-sym-picker .sym-done-btn,.node-sym-picker .sym-chip{font-size:16px}
 }
 @media screen and (max-width:1024px){
   .node-actions{gap:${Math.round(9*sm)}px;padding:${Math.round(9*sm)}px ${Math.round(11*sm)}px}
   .node-btn{width:${Math.round(46*sm)}px;height:${Math.round(46*sm)}px;
     font-size:${Math.max(19,Math.round(19*sm))}px}
   .node-input,.node-occ-select,.node-inline-editor,.node-rename-split .rs-sign,.node-rename-split .rs-rest,.node-rename-split .rs-sign-text{font-size:16px;min-height:${Math.max(52, Math.round(50 * sm))}px;padding:12px 14px}
+  .node-sym-picker .sym-add-input,.node-sym-picker .sym-add-btn,.node-sym-picker .sym-done-btn,.node-sym-picker .sym-chip{font-size:16px}
 }
 ${colorCSS}`;
 }
@@ -309,7 +371,77 @@ const KNOWN_SIGNS=(typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OP
 const ROOT_ID=(typeof PREVIEW_OPTIONS==='object' && typeof PREVIEW_OPTIONS.rootId==='number')
   ? PREVIEW_OPTIONS.rootId
   : null;
+const SYMBOL_TERMS=(typeof PREVIEW_OPTIONS==='object' && Array.isArray(PREVIEW_OPTIONS.symbolTerms))
+  ? PREVIEW_OPTIONS.symbolTerms.filter(v=>typeof v==='string')
+  : [];
+const SECOND_OCC_CHILD_TERM=(typeof PREVIEW_OPTIONS==='object' && typeof PREVIEW_OPTIONS.secondOccChildTerm==='string')
+  ? PREVIEW_OPTIONS.secondOccChildTerm
+  : 'Second Occupation Child';
+const INIT_PICKER_ID=(typeof PREVIEW_OPTIONS==='object' && typeof PREVIEW_OPTIONS.pickerOpenId==='number')
+  ? PREVIEW_OPTIONS.pickerOpenId
+  : null;
 const NODE_COLOR_MAP=${colorMapJSON};
+
+/* ── Symbol helpers (mirrors data.js) ── */
+function normTerm(t){return String(t||'').trim().replace(/\\s+/g,' ');}
+function nodeSymbols(node){
+  const list=Array.isArray(node?.meta?.symbols)?node.meta.symbols:[];
+  const seen=new Set(); const out=[];
+  for(const raw of list){
+    const t=normTerm(raw); if(!t) continue;
+    const k=t.toLowerCase(); if(seen.has(k)) continue;
+    seen.add(k); out.push(t);
+  }
+  return out;
+}
+function computeLetters(terms){
+  const norm=terms.map(normTerm).filter(Boolean);
+  const lens=new Map();
+  for(const t of norm) lens.set(t,1);
+  const MAX=3;
+  for(let pass=0; pass<MAX; pass++){
+    const buckets=new Map();
+    for(const t of norm){
+      const n=Math.min(lens.get(t),t.length);
+      const key=t.slice(0,n).toLowerCase();
+      if(!buckets.has(key)) buckets.set(key,[]);
+      buckets.get(key).push(t);
+    }
+    let extended=false;
+    for(const group of buckets.values()){
+      if(group.length<2) continue;
+      for(const t of group){
+        const c=lens.get(t);
+        if(c<t.length && c<MAX){ lens.set(t,c+1); extended=true; }
+      }
+    }
+    if(!extended) break;
+  }
+  const out={};
+  for(const t of norm){
+    const n=Math.min(lens.get(t),t.length);
+    const s=t.slice(0,n);
+    out[t]=s.charAt(0).toUpperCase()+s.slice(1).toLowerCase();
+  }
+  return out;
+}
+/* Returns {top:y%, left:x%} for the i-th symbol in a card (0..N-1).
+   Corners cycle TR, TL, BR, BL; subsequent indices stack inward along
+   the same edge. Hardcoded 8px insets match the existing badge layout. */
+function symbolPosition(i, total){
+  const corner=i%4;             // 0..3
+  const ring=Math.floor(i/4);   // 0,1,2…
+  const inset=8;
+  const step=Math.max(18, Math.round(24*0.85)); // stacking step in px
+  const off=ring*step;
+  switch(corner){
+    case 0: return {top:(inset+off)+'px', right:inset+'px', left:'', bottom:''};
+    case 1: return {top:(inset+off)+'px', left:inset+'px', right:'', bottom:''};
+    case 2: return {bottom:(inset+off)+'px', right:inset+'px', left:'', top:''};
+    case 3: return {bottom:(inset+off)+'px', left:inset+'px', right:'', top:''};
+  }
+  return {top:inset+'px', left:inset+'px', right:'', bottom:''};
+}
 
 /* Split / join — mirrors data.js. Keep behavior identical. */
 function splitName(name){
@@ -423,7 +555,7 @@ function post(msg){window.parent.postMessage(msg,'*');}
 function act(id,action,extras){post({type:'node-action',id,action,...(extras||{})});}
 
 /* ── Drag-reparent state ── */
-let selId=INIT_SEL, renamingId=null, focusRenameId=null, occupationEditingId=null, focusOccId=null, secondOccupationEditingId=null, focusOcc2Id=null, rankEditingId=null, focusRankId=null;
+let selId=INIT_SEL, renamingId=null, focusRenameId=null, occupationEditingId=null, focusOccId=null, secondOccupationEditingId=null, focusOcc2Id=null, symbolEditingId=INIT_PICKER_ID;
 let suppressSceneClick=false, suppressNodeClickUntil=0;
 const REPAR_HOLD_MS=260, REPAR_MOVE_TOL=8;
 let holdDrag=null;
@@ -458,7 +590,7 @@ function pickTarget(cx,cy,src){
 }
 function beginHoldReparent(e,id){
   if(e.pointerType==='mouse'&&e.button!==0) return;
-  if(renamingId!==null||occupationEditingId!==null||secondOccupationEditingId!==null||rankEditingId!==null) return;
+  if(renamingId!==null||occupationEditingId!==null||secondOccupationEditingId!==null||symbolEditingId!==null) return;
   const wrap=wrapById(id); if(!wrap) return;
   const nodeEl=wrap.querySelector('.node'); if(!nodeEl) return;
   // NOTE: do NOT stopPropagation or setPointerCapture here — the scene needs
@@ -574,22 +706,21 @@ function cancelSecondOccupationEdit(){
   secondOccupationEditingId=null; focusOcc2Id=null; renderNodes();
 }
 
-function beginRankEdit(id){
+function beginSymbolPicker(id){
   selId=id;
   renamingId=null; focusRenameId=null;
   occupationEditingId=null; focusOccId=null;
   secondOccupationEditingId=null; focusOcc2Id=null;
-  rankEditingId=id; focusRankId=id;
+  symbolEditingId=id;
   updateSelection(); renderNodes();
   post({type:'select-node',id});
+  post({type:'picker-state',id});
 }
-function commitRank(id, sel){
-  const value=(sel.value||'').trim();
-  rankEditingId=null; focusRankId=null; renderNodes();
-  act(id,'set-rank',{value});
-}
-function cancelRankEdit(){
-  rankEditingId=null; focusRankId=null; renderNodes();
+function closeSymbolPicker(){
+  const wasOpenOn=symbolEditingId;
+  symbolEditingId=null;
+  renderNodes();
+  if(wasOpenOn!==null) post({type:'picker-state',id:null});
 }
 
 /* ── Card DOM builder ──
@@ -602,12 +733,15 @@ function buildCardContent(nodeEl, node){
   const bgColor = NODE_COLOR_MAP[sc2(node.name)] || '#ffffff';
   const fg=textColorFor(bgColor);
   const hasDouble = !!(node.meta?.occupation2);
-  const hasEmblem = !!node.meta?.emblem;
-  const hasNotable = !!node.meta?.notable;
-  const rank = (node.meta?.rank === 'ascended' || node.meta?.rank === 'sentinel') ? node.meta.rank : '';
-  const hasRank = !!rank;
-  const symbolCount = (hasDouble ? 1 : 0) + (hasEmblem ? 1 : 0) + (hasNotable ? 1 : 0) + (hasRank ? 1 : 0);
-  const symbolSize = symbolCount >= 4 ? 22 : (symbolCount >= 3 ? 24 : (symbolCount === 2 ? 28 : 32));
+  const syms = nodeSymbols(node);
+
+  // Total symbol count includes the hardcoded 2O badge if present.
+  const totalSymbols = (hasDouble ? 1 : 0) + syms.length;
+  const symbolSize =
+    totalSymbols >= 6 ? 20 :
+    totalSymbols >= 4 ? 22 :
+    totalSymbols >= 3 ? 24 :
+    totalSymbols === 2 ? 28 : 32;
   nodeEl.style.setProperty('--symbol-size', symbolSize + 'px');
 
   if(hasDouble) nodeEl.classList.add('double-occupation');
@@ -618,33 +752,31 @@ function buildCardContent(nodeEl, node){
   nameLbl.style.color=fg;
   nodeEl.appendChild(nameLbl);
 
-  // Double-occupation badge
+  // Double-occupation badge (hardcoded, top-right). Takes corner index 0.
   const occ2Badge=document.createElement('div');
   occ2Badge.className='double-occupation-badge'+(hasDouble ? ' visible' : '');
   occ2Badge.textContent='R';
   occ2Badge.style.color=fg;
   nodeEl.appendChild(occ2Badge);
 
-  // Emblem badge
-  const emblemEl=document.createElement('div');
-  emblemEl.className='special-emblem'+(hasEmblem ? ' visible' : '');
-  emblemEl.textContent='Rc';
-  emblemEl.style.color=fg;
-  nodeEl.appendChild(emblemEl);
-
-  // Notable badge
-  const notableEl=document.createElement('div');
-  notableEl.className='notable-badge'+(hasNotable ? ' visible' : '');
-  notableEl.textContent='N';
-  notableEl.style.color=fg;
-  nodeEl.appendChild(notableEl);
-
-  // Rank badge (Ascended -> A, Sentinel -> S)
-  const rankEl=document.createElement('div');
-  rankEl.className='rank-badge'+(hasRank ? ' visible' : '');
-  rankEl.textContent=rank==='ascended' ? 'A' : (rank==='sentinel' ? 'S' : '');
-  rankEl.style.color=fg;
-  nodeEl.appendChild(rankEl);
+  // Dynamic symbol badges from meta.symbols.
+  // Start placing at corner index 1 (TL) if 2O takes index 0; otherwise from 0.
+  const letterMap = computeLetters(syms);
+  const startIdx = hasDouble ? 1 : 0;
+  syms.forEach((term, i) => {
+    const idx = startIdx + i;
+    const badge=document.createElement('div');
+    badge.className='sym-badge visible';
+    badge.textContent=letterMap[term] || term.charAt(0).toUpperCase();
+    badge.title=term;
+    badge.style.color=fg;
+    const pos=symbolPosition(idx, totalSymbols);
+    if(pos.top)    badge.style.top=pos.top;
+    if(pos.bottom) badge.style.bottom=pos.bottom;
+    if(pos.left)   badge.style.left=pos.left;
+    if(pos.right)  badge.style.right=pos.right;
+    nodeEl.appendChild(badge);
+  });
 
   // Rebirth badge (hidden until meta.reborn is true)
   const rebirthEl=document.createElement('div');
@@ -665,7 +797,7 @@ function applyActionButtonScale(scale = actionBtnScale) {
       a.style.transformOrigin = 'top center';
       a.style.transform = 'scale('+scale+')';
     }
-    for(const el of nl.querySelectorAll('.node-inline-editor, .node-rename-split')){
+    for(const el of nl.querySelectorAll('.node-inline-editor, .node-rename-split, .node-sym-picker')){
       // Anchor editors to their bottom edge so they expand upward, away from
       // the action bar below them, while still matching the current zoom.
       el.style.transformOrigin = 'bottom center';
@@ -831,31 +963,123 @@ function renderNodes(){
       if(focusOccId===id){
         requestAnimationFrame(()=>{sel.focus();focusOccId=null;});
       }
-    } else if(rankEditingId===id){
-      const sel=document.createElement('select');
-      sel.className='node-occ-select node-inline-editor';
-      const empty=document.createElement('option');
-      empty.value=''; empty.textContent='(No rank)';
-      sel.appendChild(empty);
-      for(const r of [['ascended','Ascended'],['sentinel','Sentinel']]){
-        const opt=document.createElement('option');
-        opt.value=r[0];
-        opt.textContent=r[1];
-        sel.appendChild(opt);
+    } else if(symbolEditingId===id){
+      // Symbol picker: chips for every term in the library + add-new + done.
+      const box=document.createElement('div');
+      box.className='node-sym-picker';
+
+      const parentId=po.get(id);
+      const parentNode=parentId!==undefined?nd.get(parentId):null;
+      const parentHas2O=!!(parentNode?.meta?.occupation2);
+
+      const current=nodeSymbols(node);
+      const currentLower=new Set(current.map(t=>t.toLowerCase()));
+
+      // Build the chip list from the union of (library terms, current node terms,
+      // and the locked SECOND_OCC_CHILD_TERM so it's always present).
+      const libSet=new Set();
+      libSet.add(SECOND_OCC_CHILD_TERM);
+      for(const t of SYMBOL_TERMS) libSet.add(normTerm(t));
+      for(const t of current) libSet.add(t);
+      const allTerms=[...libSet].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+
+      const chips=document.createElement('div');
+      chips.className='sym-chips';
+
+      function rebuildChips(){
+        chips.innerHTML='';
+        if(!allTerms.length){
+          const empty=document.createElement('div');
+          empty.className='sym-empty';
+          empty.textContent='No symbols defined. Add one below.';
+          chips.appendChild(empty);
+          return;
+        }
+        for(const term of allTerms){
+          const chip=document.createElement('button');
+          chip.type='button';
+          const isOn=currentLower.has(term.toLowerCase());
+          const isLocked=(term.toLowerCase()===SECOND_OCC_CHILD_TERM.toLowerCase());
+          const disabled=isLocked && !parentHas2O && !isOn;
+          chip.className='sym-chip'+(isOn?' on':'')+(disabled?' disabled':'');
+          chip.title=term+(disabled?' — requires parent with second occupation':'');
+          chip.textContent=term;
+          if(!isLocked){
+            // Add a small delete affordance to remove from the library.
+            const x=document.createElement('span');
+            x.className='sym-chip-x';
+            x.textContent='×';
+            x.title='Remove from library';
+            x.addEventListener('click',e=>{
+              e.stopPropagation();
+              act(id,'remove-symbol-term',{term});
+            });
+            chip.appendChild(x);
+          }
+          chip.addEventListener('pointerdown',e=>e.stopPropagation());
+          chip.addEventListener('click',e=>{
+            e.stopPropagation();
+            if(disabled) return;
+            // Toggle assignment on this node.
+            if(isOn){
+              const next=current.filter(t=>t.toLowerCase()!==term.toLowerCase());
+              act(id,'set-symbols',{symbols:next});
+            } else {
+              act(id,'set-symbols',{symbols:[...current,term]});
+            }
+          });
+          chips.appendChild(chip);
+        }
       }
-      sel.value=(node.meta?.rank||'').trim();
-      sel.addEventListener('pointerdown',e=>e.stopPropagation());
-      sel.addEventListener('click',e=>e.stopPropagation());
-      sel.addEventListener('blur',()=>commitRank(id,sel));
-      sel.addEventListener('keydown',e=>{
-        if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commitRank(id,sel);}
-        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancelRankEdit();}
+      rebuildChips();
+      box.appendChild(chips);
+
+      // Add-new row
+      const addRow=document.createElement('div');
+      addRow.className='sym-add-row';
+      const addInp=document.createElement('input');
+      addInp.type='text';
+      addInp.className='sym-add-input';
+      addInp.placeholder='New symbol term…';
+      addInp.spellcheck=false;
+      const addBtn=document.createElement('button');
+      addBtn.type='button';
+      addBtn.className='sym-add-btn';
+      addBtn.textContent='Add';
+      const doneBtn=document.createElement('button');
+      doneBtn.type='button';
+      doneBtn.className='sym-done-btn';
+      doneBtn.textContent='Done';
+
+      function submitAdd(){
+        const t=normTerm(addInp.value);
+        if(!t) return;
+        addInp.value='';
+        // Send to host; main.js will add to the library and assign to this node.
+        act(id,'add-symbol-term',{term:t,assignToNode:true});
+      }
+
+      addBtn.addEventListener('pointerdown',e=>e.stopPropagation());
+      addBtn.addEventListener('click',e=>{e.stopPropagation();submitAdd();});
+      doneBtn.addEventListener('pointerdown',e=>e.stopPropagation());
+      doneBtn.addEventListener('click',e=>{e.stopPropagation();closeSymbolPicker();});
+      addInp.addEventListener('pointerdown',e=>e.stopPropagation());
+      addInp.addEventListener('click',e=>e.stopPropagation());
+      addInp.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();e.stopPropagation();submitAdd();}
+        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeSymbolPicker();}
       });
-      sel.addEventListener('change',()=>commitRank(id,sel));
-      wrap.appendChild(sel);
-      if(focusRankId===id){
-        requestAnimationFrame(()=>{sel.focus();focusRankId=null;});
-      }
+
+      addRow.appendChild(addInp);
+      addRow.appendChild(addBtn);
+      addRow.appendChild(doneBtn);
+      box.appendChild(addRow);
+
+      // Stop bubbling so the scene doesn't pan or deselect.
+      box.addEventListener('pointerdown',e=>e.stopPropagation());
+      box.addEventListener('click',e=>e.stopPropagation());
+
+      wrap.appendChild(box);
     } else if(secondOccupationEditingId===id){
       const sel=document.createElement('select');
       sel.className='node-occ-select node-inline-editor';
@@ -889,11 +1113,13 @@ function renderNodes(){
         e.stopPropagation();
         if(performance.now()<suppressNodeClickUntil) return;
         selId=id;
+        const wasPickerOpen=symbolEditingId!==null;
         renamingId=null;
         occupationEditingId=null;
         secondOccupationEditingId=null;
-        rankEditingId=null;
+        symbolEditingId=null;
         renderNodes(); post({type:'select-node',id});
+        if(wasPickerOpen) post({type:'picker-state',id:null});
       });
       buildCardContent(d, node);
       wrap.appendChild(d);
@@ -942,11 +1168,7 @@ function renderNodes(){
     acts.appendChild(mkBtn('✎','Rename',()=>beginRename(id)));
     acts.appendChild(mkBtn('Oc','Set occupation',()=>beginOccupationEdit(id)));
     acts.appendChild(mkBtn('2O','Second occupation',()=>beginSecondOccupationEdit(id), OCCUPATION_OPTIONS.length===0));
-    if(parentNode?.meta?.occupation2){
-      acts.appendChild(mkBtn('★','Toggle emblem',()=>act(id,'toggle-emblem')));
-    }
-    acts.appendChild(mkBtn('N','Toggle notable',()=>act(id,'toggle-notable')));
-    acts.appendChild(mkBtn('AS','Set rank (Ascended / Sentinel)',()=>beginRankEdit(id)));
+    acts.appendChild(mkBtn('◆','Symbols',()=>beginSymbolPicker(id)));
     if(parentId!==undefined) acts.appendChild(mkBtn('×','Delete',()=>act(id,'delete')));
     wrap.appendChild(acts);
     nl.appendChild(wrap);
@@ -1149,7 +1371,13 @@ sc.addEventListener('click',e=>{
   if(suppressSceneClick) return;
   if(e.target.closest('.node-wrap')) return;
   if(renamingId!==null) return;
-  selId=null;updateSelection();post({type:'select-node',id:null});
+  const wasPickerOpen=symbolEditingId!==null;
+  selId=null;
+  symbolEditingId=null;
+  updateSelection();
+  if(wasPickerOpen) renderNodes();
+  post({type:'select-node',id:null});
+  if(wasPickerOpen) post({type:'picker-state',id:null});
 });
 
 /* Mouse wheel zoom */

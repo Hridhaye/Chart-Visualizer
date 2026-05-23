@@ -46,7 +46,10 @@ export function applySnapshot(data) {
     ? data.occupations.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean)
     : [];
   const showOccupationSlips = !!data.showOccupationSlips;
-  return { root, uid, occupations, showOccupationSlips };
+  const symbolTerms = Array.isArray(data.symbolTerms)
+    ? data.symbolTerms.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean)
+    : [];
+  return { root, uid, occupations, showOccupationSlips, symbolTerms };
 }
 
 // ── Local save / load ─────────────────────────────────────────────────────────

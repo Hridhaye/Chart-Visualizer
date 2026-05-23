@@ -4,7 +4,7 @@
  * relationship arrays. No DOM side-effects; callers wire these to buttons.
  */
 
-import { makeNode, toRelationships } from './data.js';
+import { makeNode, toRelationships, normalizeTerm, SECOND_OCC_CHILD_TERM } from './data.js';
 
 const EDGE_SEP = ' >> ';
 const ROOT_PREFIX = '!ROOT ';
@@ -31,10 +31,38 @@ function canonicalizeKey(key) {
   return '';
 }
 
+// Reserved keys handled specifically (occupation / occupation2). Any other
+// "Word: true" tag becomes a symbol term, including the legacy keys
+// (notable / rank / secondOccupationChild) for backwards compatibility.
+const RESERVED_VALUE_KEYS = new Set(['occupation', 'occupation2']);
+
+function legacyKeyToTerm(canonicalKey, rawValue) {
+  if (canonicalKey === 'notable') return parseBool(rawValue) ? 'Notable' : null;
+  if (canonicalKey === 'emblem')  return parseBool(rawValue) ? SECOND_OCC_CHILD_TERM : null;
+  if (canonicalKey === 'rank') {
+    const v = String(rawValue || '').trim().toLowerCase();
+    if (v === 'ascended') return 'Ascended';
+    if (v === 'sentinel') return 'Sentinel';
+    return null;
+  }
+  return null;
+}
+
 function parseNodeLine(line) {
   const segments = line.split('|').map(s => s.trim()).filter(Boolean);
   const name = (segments.shift() || '').trim();
   const meta = {};
+  const symbols = [];
+  const seenSymbol = new Set();
+
+  function addSymbol(term) {
+    const t = normalizeTerm(term);
+    if (!t) return;
+    const k = t.toLowerCase();
+    if (seenSymbol.has(k)) return;
+    seenSymbol.add(k);
+    symbols.push(t);
+  }
 
   for (const segment of segments) {
     const sep = segment.includes(':') ? ':' : (segment.includes('=') ? '=' : null);
@@ -42,19 +70,25 @@ function parseNodeLine(line) {
     const idx = segment.indexOf(sep);
     const rawKey = segment.slice(0, idx).trim();
     const rawValue = segment.slice(idx + 1).trim();
-    const key = canonicalizeKey(rawKey);
-    if (!key) continue;
 
-    if (key === 'occupation') meta.occupation = rawValue;
-    else if (key === 'occupation2') meta.occupation2 = rawValue;
-    else if (key === 'emblem') meta.emblem = parseBool(rawValue);
-    else if (key === 'notable') meta.notable = parseBool(rawValue);
-    else if (key === 'rank') {
-      const v = String(rawValue || '').trim().toLowerCase();
-      if (v === 'ascended' || v === 'sentinel') meta.rank = v;
+    const canonical = canonicalizeKey(rawKey);
+    if (canonical === 'occupation') { meta.occupation = rawValue; continue; }
+    if (canonical === 'occupation2') { meta.occupation2 = rawValue; continue; }
+
+    // Legacy boolean/rank fields → symbol terms.
+    if (canonical === 'notable' || canonical === 'emblem' || canonical === 'rank') {
+      const term = legacyKeyToTerm(canonical, rawValue);
+      if (term) addSymbol(term);
+      continue;
     }
+
+    // Anything else of the form "Word: true" is treated as a symbol term.
+    // The term is taken from rawKey verbatim (after normalization) so casing
+    // and spaces from the user are preserved.
+    if (parseBool(rawValue)) addSymbol(rawKey);
   }
 
+  if (symbols.length) meta.symbols = symbols;
   return { name, meta };
 }
 
@@ -65,10 +99,20 @@ function normalizeMeta(meta) {
     const occupation2 = String(meta.occupation2 || '').trim();
     if (occupation) out.occupation = occupation;
     if (occupation2) out.occupation2 = occupation2;
-    if (meta.emblem) out.emblem = true;
-    if (meta.notable) out.notable = true;
-    const rank = String(meta.rank || '').trim().toLowerCase();
-    if (rank === 'ascended' || rank === 'sentinel') out.rank = rank;
+    // Pass through any pre-existing symbols (from in-memory tree → snapshot path).
+    if (Array.isArray(meta.symbols) && meta.symbols.length) {
+      const seen = new Set();
+      const list = [];
+      for (const raw of meta.symbols) {
+        const t = normalizeTerm(raw);
+        if (!t) continue;
+        const k = t.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        list.push(t);
+      }
+      if (list.length) out.symbols = list;
+    }
   }
   return out;
 }
@@ -85,6 +129,7 @@ export function parseIndentedText(text) {
   let nodeCount = 0;
   let pairCount = 0;
   const occupations = new Set();
+  const symbolTerms = new Set();
 
   for (const raw of text.split('\n')) {
     if (!raw.trim()) continue;
@@ -106,6 +151,7 @@ export function parseIndentedText(text) {
     node.meta = normalizeMeta(meta);
     if (node.meta.occupation) occupations.add(node.meta.occupation);
     if (node.meta.occupation2) occupations.add(node.meta.occupation2);
+    if (Array.isArray(node.meta.symbols)) for (const t of node.meta.symbols) symbolTerms.add(t);
 
     while (stack.length > 0 && stack[stack.length - 1].depth >= depth) {
       stack.pop();
@@ -131,6 +177,7 @@ export function parseIndentedText(text) {
     nodeCount,
     pairCount,
     occupations: [...occupations].sort((a, b) => a.localeCompare(b)),
+    symbolTerms: [...symbolTerms].sort((a, b) => a.localeCompare(b)),
   };
 }
 
@@ -168,11 +215,16 @@ function metaSuffix(node) {
   const occupation2 = String(node.meta?.occupation2 || '').trim();
   if (occupation) parts.push(`occupation: ${occupation}`);
   if (occupation2) parts.push(`secondOccupation: ${occupation2}`);
-  if (node.meta?.emblem) parts.push('secondOccupationChild: true');
-  if (node.meta?.notable) parts.push('notable: true');
-  const rank = String(node.meta?.rank || '').trim().toLowerCase();
-  if (rank === 'ascended' || rank === 'sentinel') {
-    parts.push(`rank: ${rank === 'ascended' ? 'Ascended' : 'Sentinel'}`);
+  if (Array.isArray(node.meta?.symbols)) {
+    const seen = new Set();
+    for (const raw of node.meta.symbols) {
+      const t = normalizeTerm(raw);
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      parts.push(`${t}: true`);
+    }
   }
   return parts.length ? ' | ' + parts.join(' | ') : '';
 }
@@ -204,7 +256,7 @@ export function exportToIndentedText(root) {
 
   const header = [
     '# Family tree as an edge list. Each line is one parent-child relationship:',
-    '#   Parent >> Child              (optionally: | occupation: X | secondOccupation: Y | secondOccupationChild: true | notable: true | rank: Ascended|Sentinel)',
+    '#   Parent >> Child              (optionally: | occupation: X | secondOccupation: Y | <SymbolTerm>: true ...)',
     '# Sibling order = order of appearance under each parent.',
     '# The root is the node that never appears on the right side of ">>".',
     '# A "!ROOT Name | attrs" line (if present) sets attributes on the root.',
@@ -225,6 +277,7 @@ export function parseEdgeList(text) {
   let nodeCount = 0;
   let pairCount = 0;
   const occupations = new Set();
+  const symbolTerms = new Set();
   let explicitRootName = null;
 
   function getOrCreate(name) {
@@ -243,6 +296,7 @@ export function parseEdgeList(text) {
     node.meta = normalizeMeta(meta);
     if (node.meta.occupation) occupations.add(node.meta.occupation);
     if (node.meta.occupation2) occupations.add(node.meta.occupation2);
+    if (Array.isArray(node.meta.symbols)) for (const t of node.meta.symbols) symbolTerms.add(t);
   }
 
   for (const raw of text.split('\n')) {
@@ -297,6 +351,7 @@ export function parseEdgeList(text) {
     nodeCount,
     pairCount,
     occupations: [...occupations].sort((a, b) => a.localeCompare(b)),
+    symbolTerms: [...symbolTerms].sort((a, b) => a.localeCompare(b)),
   };
 }
 

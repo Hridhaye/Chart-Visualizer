@@ -12,11 +12,18 @@
  *     rebirthChildSplit?: number   — index of first post-rebirth child (upcoming)
  *     occupation?: string          — god-vocation text (upcoming)
  *     occupation2?: string         — secondary occupation for special dual-occupation cards
- *     emblem?: boolean             — marks a node with a special child/emblem indicator
- *     notable?: boolean            — marks a node/card as notable
- *     rank?: 'ascended' | 'sentinel' — special rank shown as A/S badge
+ *     emblem?: boolean             — DEPRECATED: migrated into meta.symbols on load
+ *     notable?: boolean            — DEPRECATED: migrated into meta.symbols on load
+ *     rank?: 'ascended' | 'sentinel' — DEPRECATED: migrated into meta.symbols on load
+ *     symbols?: string[]           — user-defined symbol terms (e.g. "Notable", "Ascended")
  *   }
  */
+
+/**
+ * The one symbol term whose presence is gated on the parent having a second
+ * occupation. It cannot be removed from the symbol library.
+ */
+export const SECOND_OCC_CHILD_TERM = 'Second Occupation Child';
 
 export let uid = 1;
 
@@ -188,6 +195,130 @@ export function knownSigns(root) {
   const set = new Set(Object.keys(SIGN_COLORS));
   if (root) for (const s of signsInTree(root)) if (s) set.add(s);
   return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// ── Symbol system ────────────────────────────────────────────────────────────
+
+/**
+ * Normalize a symbol term: trimmed, single-spaced, preserving case.
+ */
+export function normalizeTerm(term) {
+  return String(term || '').trim().replace(/\s+/g, ' ');
+}
+
+/** Case-insensitive equality for terms. */
+export function termsEqual(a, b) {
+  return normalizeTerm(a).toLowerCase() === normalizeTerm(b).toLowerCase();
+}
+
+/**
+ * Return the symbol terms on a node as a normalized, deduped array.
+ * Reads from meta.symbols. Does NOT touch legacy fields.
+ */
+export function getNodeSymbols(node) {
+  const list = Array.isArray(node?.meta?.symbols) ? node.meta.symbols : [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of list) {
+    const t = normalizeTerm(raw);
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Compute the short visual letter(s) for each term in the given list.
+ * Returns an object: { term: letters }.
+ *
+ * Algorithm: start with 1 letter for every term. While any group of terms
+ * shares the same prefix, extend each colliding term by one letter (capped
+ * at 3). Comparison is case-insensitive; output preserves original casing
+ * from the source term, capitalizing the first letter and lowercasing the rest.
+ */
+export function computeSymbolLetters(terms) {
+  const norm = terms.map(t => normalizeTerm(t)).filter(Boolean);
+  const lens = new Map();
+  for (const t of norm) lens.set(t, 1);
+
+  const MAX_LEN = 3;
+  for (let pass = 0; pass < MAX_LEN; pass++) {
+    const buckets = new Map();
+    for (const t of norm) {
+      const len = Math.min(lens.get(t), t.length);
+      const key = t.slice(0, len).toLowerCase();
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(t);
+    }
+    let extended = false;
+    for (const group of buckets.values()) {
+      if (group.length < 2) continue;
+      for (const t of group) {
+        const cur = lens.get(t);
+        if (cur < t.length && cur < MAX_LEN) {
+          lens.set(t, cur + 1);
+          extended = true;
+        }
+      }
+    }
+    if (!extended) break;
+  }
+
+  const out = {};
+  for (const t of norm) {
+    const n = Math.min(lens.get(t), t.length);
+    const slice = t.slice(0, n);
+    // First letter capitalized, rest lowercased — gives "As", "Asc", etc.
+    out[t] = slice.charAt(0).toUpperCase() + slice.slice(1).toLowerCase();
+  }
+  return out;
+}
+
+/**
+ * Migrate legacy boolean/string meta fields into meta.symbols. Runs on load
+ * and on every deserialize. Idempotent — safe to call repeatedly.
+ *
+ * Returns the set of terms that were introduced into the library by this
+ * migration, so the caller can seed them into the user's symbol library.
+ */
+export function migrateLegacySymbolsInTree(root) {
+  const introduced = new Set();
+  function visit(n) {
+    if (!n) return;
+    const meta = n.meta || {};
+    const existing = Array.isArray(meta.symbols) ? meta.symbols.slice() : [];
+    const haveLower = new Set(existing.map(t => normalizeTerm(t).toLowerCase()));
+    const add = term => {
+      const t = normalizeTerm(term);
+      if (!t) return;
+      const k = t.toLowerCase();
+      if (!haveLower.has(k)) {
+        existing.push(t);
+        haveLower.add(k);
+      }
+      introduced.add(t);
+    };
+    if (meta.notable === true) add('Notable');
+    if (meta.emblem === true)  add(SECOND_OCC_CHILD_TERM);
+    if (meta.rank === 'ascended') add('Ascended');
+    if (meta.rank === 'sentinel') add('Sentinel');
+
+    if (existing.length || 'symbols' in meta) {
+      n.meta = { ...meta, symbols: existing };
+    }
+    // Clear deprecated fields so they don't keep migrating / round-tripping.
+    if (n.meta) {
+      if ('notable' in n.meta) delete n.meta.notable;
+      if ('emblem'  in n.meta) delete n.meta.emblem;
+      if ('rank'    in n.meta) delete n.meta.rank;
+    }
+    for (const c of n.children || []) visit(c);
+  }
+  visit(root);
+  return [...introduced];
 }
 
 // ── Tree from relationship pairs ──────────────────────────────────────────────
